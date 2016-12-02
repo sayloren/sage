@@ -36,8 +36,8 @@ def eachFileProcess(fileName):
 	return btFeatures
 
 # 2 - save the file as slop_filename.bed
-def saveBedTool(xxx, strFilename):
-	xxx.saveas(strFilename)
+def saveBedTool(btFeatures, strFilename):
+	btFeatures.saveas(strFilename)
 
 
 def main(args):
