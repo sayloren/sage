@@ -13,7 +13,10 @@ the intersecting regions, ranked by most intersections
 
 NOTE: will not take files with headers 
 
-Version 2: headers added from file names, altrnative use of bedtool annotate
+Version 2: headers added from file names
+
+To Do: use bedtool annotate, also figure out how to convert to binary matrix, 
+just in case
 
 Wren Saylor
 November 30 2016
@@ -43,45 +46,45 @@ def bedtoolToPanda(myRegions):
 	matrixRegions = pd.read_table(myRegions.fn, header=None)
 	return matrixRegions
 
+# # 3 - convert to binary matrix (if were to do this, make new columns, then cut old)
+# def binaryMatrix(matrixRegions):
+# 	matrixRegions[''] = matrixRegions.iloc[:,4::].apply(lambda x: 1 if x >= 1 else 0)
+# 	return 
+
 # 3 - sum the columns
 def pandaColSums(matrixRegions):
-	matrixRegions['TotalCount'] = matrixRegions.iloc[:,4::].sum(axis=1)
-	pdRank = matrixRegions[['Chromosome','Start','Stop','ID','TotalCount']]
+	matrixRegions['TotalCount'] = matrixRegions.iloc[:,4::].sum(axis=1) 
+	pdRank = matrixRegions
 	return pdRank
 
+# 4 - sort by rank
 def sortRank(pdRank):
-	pdSort = pdRank.sort(['TotalCount'],ascending=False)
+	#pdSort = pdRank.sort(['TotalCount'],ascending=False)
+	pdSort = pdRank.sort_values(['TotalCount'],ascending=False)
 	return pdSort
 
-# save file from panda
+# 5 - save file from panda
 def savePanda(pdData, strFilename):
 	pdData.to_csv(strFilename, sep='\t', index=False)
 
 
 def main(args):
 
-
 	myRegions = eachFileProcess(args.regions)
-
 	# grab the file names from the master txt file
 	aFiles = [line.strip() for line in args.file]
 	myColumns = ['Chromosome','Start','Stop','ID']
 	# for file in master txt file
 	for fileName in aFiles:
-		# make string of column names
 		strFile = str(fileName)
 		myColumns.append(strFile)
 		btFeatures = eachFileProcess(fileName)
 		myRegions = myRegions.intersect(btFeatures,c=True)
 	matrixRegions = bedtoolToPanda(myRegions)
 	matrixRegions.columns = myColumns
-	# save the whole matrix 
-	savePanda(matrixRegions,"CountMatrix"+str(args.regions))
 	pdRank = pandaColSums(matrixRegions)
 	pdSort = sortRank(pdRank)
-	# save the sum
-	savePanda(pdSort,"CountSum"+str(args.regions))
-
+	savePanda(pdSort,"CountMatrix"+str(args.regions))
 
 
 if __name__ == "__main__":
