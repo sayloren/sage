@@ -43,7 +43,7 @@ def bedtoolToPanda(btFeatures):
 
 # 3 - count the overlaps
 def pandaColSums(pdObject):
-	pdObject['TotalCount'] = pdObject.iloc[:,4::].sum(axis=1)
+	pdObject['TotalCount'] = pdObject.iloc[:,4::].sum(axis=1) # if matrix is already summed, comment this line out
 	pdObjectCounts = pdObject[['Chromosome','Start','Stop','ID','TotalCount']]
 	return pdObjectCounts
 
