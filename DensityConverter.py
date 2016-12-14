@@ -11,7 +11,7 @@ maker
 
 Version 2: added sort
 
-Version 3: streamlined
+Version 3: streamlined function
 
 Wren Saylor, adapted from Ruth's Density Script
 December 13 2016
@@ -55,7 +55,6 @@ def cutToFraction(btIntersect):
 
 # 5 - merge the density features in the windows by mean
 def mergeWindow(btCutToFraction):
-	print btCutToFraction
 	btMerge = btCutToFraction.merge(c=4,o="mean")
 	return btMerge
 
@@ -69,8 +68,6 @@ def main():
 	arFilenames = getFileNames(args)
 	for filename in arFilenames:
 		btFeatures = getFeatures(filename)
-		
-		#print btFeatures # doesn't print - probably a mal-formed row
 		btIntersect = intersectWindow(btWindows,btFeatures)
 		btCutToFraction = cutToFraction(btIntersect)
 		btMerge = mergeWindow(btCutToFraction)
