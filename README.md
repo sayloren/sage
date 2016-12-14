@@ -1,8 +1,6 @@
 # README #
 
-### What is this repository for? ###
-
-This is a handful of unrelated sripts that have been useful for UCE related things in the Wu Lab
+### This is a handful of unrelated sripts that have been useful for UCE related things in the Wu Lab ###
 
 IntersectFlagC.py 
 Inputs: A file of regions of interests, a master.txt file of things to count overlaps for
