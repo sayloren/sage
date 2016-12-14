@@ -4,9 +4,12 @@ Script for converting density data from UCSC (was wig, used wig2bed, now bedfile
 fourth column is density) to the bin-ed density needed to run in Ruth's Density script
 
 Input: A master text file with the file names of the interval files you wish to convert
-and the bin file returned from Ruth's Density script with the bins to use
+and the bin file returned from Ruth's Density script with the windows to use
 
-Output: Density files with proper windows binned
+Output: Density files with proper windows binned that can be piped right into Ruth's Matrix
+maker
+
+Version 2: added sort
 
 Wren Saylor, adapted from Ruth's Density Script
 December 13 2016
@@ -34,9 +37,10 @@ def getFileNames(args):
 
 # 2 - get features of file
 def getFeatures(strFileName):
-	btFeatures = pbt.BedTool(strFileName)
+	preSortbtFeatures = pbt.BedTool(strFileName)
+	btFeatures = preSortbtFeatures.sort()
 	return btFeatures
-
+	
 # 3 - left outer join intersect 
 def intersectWindow(btWindows, btFeatures):
 	btIntersect = btWindows.intersect(btFeatures,loj=True)
@@ -62,13 +66,11 @@ def mergeWindow(btCutToFraction):
 def saveBedTool(btObject, strFilename):
 	btObject.saveas(strFilename)
 
-# 8 - string commands all together
+# 8 - string commands together
 def forEachFeatureFile(strFileName, btWindows):
 	btFeatures = getFeatures(strFileName)
-	
 	btCutToFraction = getDensity(btWindows, btFeatures)
 	btMerge = mergeWindow(btCutToFraction)
-
 	saveBedTool(btMerge, str('Density_for_matrix_{0}.bed'.format(strFileName)))
 	return btMerge
 
