@@ -47,10 +47,11 @@ def makeEqualWindows(args):
 def getWindow(args):
 	originalWindows = getFeatures(args.windows)
 	nonNWindows = getFeatures(args.nonN)
-	btWindows = originalWindows.subtract(nonNWindows)
-	intWindowLength = args.size
-	btEqualWindows = btWindows.filter(lambda x: len(x) == intWindowLength)
-	btSavedEqualWindows = btEqualWindows.saveas('EqualWindowsTemp.bed')
+	btWindows = originalWindows.intersect(nonNWindows,f=1.0)
+	#btWindows = originalWindows.subtract(nonNWindows,A=True) # dont subtract the nonN regions - those are the ones I want
+	#intWindowLength = args.size
+	#btEqualWindows = btWindows.filter(lambda x: len(x) == intWindowLength)
+	btSavedEqualWindows = btWindows.saveas('EqualWindowsTemp.bed')
 	btEqualWindowsNotStream = getFeatures('EqualWindowsTemp.bed')
 	return btEqualWindowsNotStream
 
