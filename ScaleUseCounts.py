@@ -12,6 +12,7 @@ To Do:
 -Allow so that desired columns to sum over are named in the argparse input
 -Also, header is printed, to view with UCSC, will need to have the useScale = 1 option,
 and whatever other descriptions user wants added
+-Possibly use pybedtools.featurefuncs.bedgraph_scale
 
 Wren Saylor
 December 2 2016

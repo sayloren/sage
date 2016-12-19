@@ -9,6 +9,8 @@ and the bin file returned from Ruth's Density script with the windows to use
 Output: Density files with proper windows binned that can be piped right into Ruth's Matrix
 maker
 
+To Do: The merge might be over merging the lines - compressing instead of bin-ing
+
 Version 2: added sort
 
 Version 3: streamlined function
