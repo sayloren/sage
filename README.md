@@ -18,6 +18,11 @@ Unique.py
 Inputs: The newly created UCEs and the comprehensive list of all old UCEs, both in fasta format
 Outputs: The new and old UCE being compared, and whether or not they are the same
 
+
+BinElement.py
+Inputs: txt file with list of feature files where fourth column is type, .genome and .fa files
+Outputs: txt files for each uce with seq and at content in bins, at stats, histograms and boxplots 
+
 DensityConverter.py
 Inputs: A master.txt file with the interval files, with the fourth density column, and the bin file from Ruth's density script
 Outputs: A file for each input file, where the density is bined into the proper bins from Ruth's script
