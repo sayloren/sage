@@ -163,7 +163,7 @@ def main():
 			
 		arStatColumns = ['NumObs', 'floatMean', 'float25thPercentile', 'float75thPercentile', 'floatMin', 'floatMax']
 		pdAllStats = pd.DataFrame(data=arArStats, index=indexStats, columns=arStatColumns)
-		pdAllStats.to_csv('GCStatsfor_{0}.txt'.format(fileName), sep='\t')
+		pdAllStats.to_csv('ATStatsfor_{0}.txt'.format(fileName), sep='\t')
 		makeBoxplots(fileName, pdFeatures)
 
 if __name__ == "__main__":
