@@ -18,11 +18,17 @@
     Incoprorating Ruth's Plot_distance_IQR6.py, where bins are displayed continuously
     
     TODO:
-    1 - line graphs total AT content at the edges of the feature ( think about the fang graphs )
+    1 - line graphs total AT content at the edges of the feature (think about the fang graphs)
     2 - try pybedtools alternative functions
     3 - make histograms for the sloped edges around the elements, slop
     4 - find way to keep id and coordinates
     5 - make 'all' print with the types on the same pdf for the boxplot
+    6 - get directionality with first v last 5, 10, 20, 30, 1/2
+    7 - sliding window for fangs
+    8 - count of first and last 10 sums, as line graph
+    9 - contingency tables
+    10 - karyograms
+    11 - make a list of things to chunk
     
     """
 
@@ -146,7 +152,7 @@ def smoothStats(pdFeatures, fileName):
                 outType.to_csv('SmoothStatsfor_{0}_{1}.txt'.format(element,fileName),index=True,sep="\t")
                 smoothHistplot(outType, 'Distances_with_randomIQR_{0}_{1}'.format(element,fileName))
 
-# 6 - make regular histogram
+# 7 - make regular histogram
 def makeHistograms(name, fileName, group):
     strFilename = 'Hist_full_result_for_{0}_{1}.pdf'.format(name,fileName)
         plt.figure()
@@ -154,7 +160,7 @@ def makeHistograms(name, fileName, group):
         plt.savefig(strFilename, format='pdf', bbox_inches='tight')
         plt.clf()
 
-# 7 - make boxplots
+# 8 - make boxplots
 def makeBoxplots(fileName, group):
     strFilename = 'Boxplot_full_result_for_{0}.pdf'.format(fileName)
         plt.figure()
@@ -162,7 +168,7 @@ def makeBoxplots(fileName, group):
         plt.savefig(strFilename,format='pdf', bbox_inches='tight')
         plt.clf()
 
-# # 8 - Ruth's smooth histogram formating for labels and label locations
+# # Ruth's smooth histogram formating for labels and label locations
 # def getMiddleBinsGetLabels(pdValues):
 # 	seriesXValues = pdValues.ix[:, 0]
 # 	Get distance between bin
@@ -224,6 +230,38 @@ def smoothHistplot(pdValues, strName):
         plt.savefig('{0}.pdf'.format(strName), format='pdf', bbox_inches='tight')
         plt.clf()
 
+# 10 - out put directionality, as inferred by comparing first and last n base pairs
+def compareN(saveFeatures,fileName):
+    outDoc = []
+        endSize = [5, 10, 20, 30]
+        for feature in SeqIO.parse(saveFeatures, "fasta"):
+            featureID, featureSeq = feature.id[:], feature.seq[:]
+                outList = []
+                outList.append(featureID)
+                for size in endSize:
+                    start = featureSeq[:size]
+                        end = featureSeq[-size:]
+                        perSize = []
+                        perSize.append(eval('100*int(start.count("A") + start.count("a") + start.count("T") + start.count("t"))/len(start)'))
+                        perSize.append(eval('100*int(end.count("A") + end.count("a") + end.count("T") + end.count("t"))/len(end)'))
+                        outList.append(size)
+                        outList.append(perSize)
+                        if perSize[0] > perSize[1]: outList = outList + ['+']
+                        if perSize[1] > perSize[0]: outList = outList + ['-']
+                        if perSize[1] == perSize[0]: outList = outList + ['=']
+                        print "perSize", perSize
+                outDoc.extend([outList])
+    compareEnds = pd.DataFrame(outDoc)
+        print "compareEnds", compareEnds
+        savePanda(compareEnds,fileName)
+# print by type, by direction?
+
+# 11 - fangs
+
+# 12 - line graphs of UCE ends
+
+# 13 - contingency tables
+
 def main():
     args = get_args()
         aFiles = [line.strip() for line in args.file]
@@ -240,6 +278,7 @@ def main():
                         allFeatures.extend([chunkFeatures])
                 pdFeatures = pd.DataFrame(allFeatures)
                 savePanda(pdFeatures,"Bin_type_result_for_{0}.txt".format(fileName))
+                compareN(saveFeatures,'Directionality_results_for_{0}.txt'.format(fileName))
                 
                 # All UCEs, by bin
                 collectFeatures = pdFeatures.drop(pdFeatures.columns[0],axis=1)
@@ -261,14 +300,15 @@ def main():
                         indexStats.append(name)
                 
                 # Make smooth histogram
-                smoothStats(pdFeatures, fileName)
+                #smoothStats(pdFeatures, fileName)
                 
                 # Make files for AT stats
                 arStatColumns = ['NumObs', 'floatMean', 'float25thPercentile', 'float75thPercentile', 'floatMin', 'floatMax']
                 pdAllStats = pd.DataFrame(data=arArStats, index=indexStats, columns=arStatColumns)
-                pdAllStats.to_csv('ATStatsfor_{0}.txt'.format(fileName), sep='\t')
-                
-                            makeBoxplots(fileName, pdFeatures)
+                            pdAllStats.to_csv('ATStatsfor_{0}.txt'.format(fileName), sep='\t')
+
+# Boxplots
+#makeBoxplots(fileName, pdFeatures)
 
 if __name__ == "__main__":
     main()
