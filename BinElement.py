@@ -23,12 +23,11 @@
     3 - make histograms for the sloped edges around the elements, slop
     4 - find way to keep id and coordinates
     5 - make 'all' print with the types on the same pdf for the boxplot
-    6 - get directionality with first v last 5, 10, 20, 30, 1/2
-    7 - sliding window for fangs
-    8 - count of first and last 10 sums, as line graph
-    9 - contingency tables
-    10 - karyograms
-    11 - make a list of things to chunk
+    6 - sliding window for fangs
+    7 - count of first and last 10 sums, as line graph
+    8 - contingency tables
+    9 - karyograms
+    10 - make a list of things to chunk
     
     """
 
@@ -235,7 +234,7 @@ def compareN(saveFeatures,fileName):
     outDoc = []
         endSize = [5, 10, 20, 30]
         for feature in SeqIO.parse(saveFeatures, "fasta"):
-            featureID, featureSeq = feature.id[:], feature.seq[:]
+            featureID, featureSeq = feature.id[:], feature.seq[:] # perhaps could retrieve coordinates here?
                 outList = []
                 outList.append(featureID)
                 for size in endSize:
@@ -244,21 +243,38 @@ def compareN(saveFeatures,fileName):
                         perSize = []
                         perSize.append(eval('100*int(start.count("A") + start.count("a") + start.count("T") + start.count("t"))/len(start)'))
                         perSize.append(eval('100*int(end.count("A") + end.count("a") + end.count("T") + end.count("t"))/len(end)'))
-                        outList.append(size)
-                        outList.append(perSize)
+                        #outList.append(size)
+                        #outList.append(perSize)
                         if perSize[0] > perSize[1]: outList = outList + ['+']
                         if perSize[1] > perSize[0]: outList = outList + ['-']
                         if perSize[1] == perSize[0]: outList = outList + ['=']
-                        print "perSize", perSize
                 outDoc.extend([outList])
     compareEnds = pd.DataFrame(outDoc)
-        print "compareEnds", compareEnds
-        savePanda(compareEnds,fileName)
-# print by type, by direction?
+        savePanda(compareEnds,'Directionality_results_for_all_{0}.txt'.format(fileName))
+        typeList = ['exonic','intronic','intergenic']
+        for element in typeList:
+            boolType = compareEnds[compareEnds[0] == element]
+                savePanda(boolType,'Directionality_results_for_{0}_{1}.txt'.format(element,fileName))
+# print by direction? for ease in input with karyographs? - need coordinates for karyograph!!
 
 # 11 - fangs
+# Still need to think about how this should be done, sliding window?
 
 # 12 - line graphs of UCE ends
+def endLinegraphs(saveFeatures,fileName):
+    outDoc = []
+        for feature in SeqIO.parse(saveFeatures, "fasta"):
+            outList = []
+                featureID, featureSeq = feature.id[:], feature.seq[:]
+                outList.append(featureID)
+                start = featureSeq[:10]
+                end = featureSeq[-10:]
+                outList.append(eval('100*int(start.count("A") + start.count("a") + start.count("T") + start.count("t"))/len(start)'))
+                outList.append(eval('100*int(end.count("A") + end.count("a") + end.count("T") + end.count("t"))/len(end)'))
+                outDoc.extend([outList])
+        compareEnds = pd.DataFrame(outDoc)
+    print compareEnds
+# but this needs to be the sum of the individual positions, not the total AT%
 
 # 13 - contingency tables
 
@@ -278,34 +294,35 @@ def main():
                         allFeatures.extend([chunkFeatures])
                 pdFeatures = pd.DataFrame(allFeatures)
                 savePanda(pdFeatures,"Bin_type_result_for_{0}.txt".format(fileName))
-                compareN(saveFeatures,'Directionality_results_for_{0}.txt'.format(fileName))
-                
-                # All UCEs, by bin
-                collectFeatures = pdFeatures.drop(pdFeatures.columns[0],axis=1)
-                stackFeatures = collectFeatures.stack()
-                arArStats = []
-                indexStats = ['all']
-                allStats = getStats(collectFeatures)
-                arArStats.append(allStats)
-                
-                # Each type of UCE, by bin
-                valFeatures = pdFeatures.groupby([0])
-                for name, group in valFeatures:
-                    group = group.drop(group.columns[0],axis=1)
-                        stack = group.stack()
-                        makeHistograms(name, fileName, stack)
-                        makeHistograms(name+"_byBin", fileName, group)
-                        typeStats = getStats(group)
-                        arArStats.append(typeStats)
-                        indexStats.append(name)
-                
-                # Make smooth histogram
-                #smoothStats(pdFeatures, fileName)
-                
-                # Make files for AT stats
-                arStatColumns = ['NumObs', 'floatMean', 'float25thPercentile', 'float75thPercentile', 'floatMin', 'floatMax']
-                pdAllStats = pd.DataFrame(data=arArStats, index=indexStats, columns=arStatColumns)
-                            pdAllStats.to_csv('ATStatsfor_{0}.txt'.format(fileName), sep='\t')
+            endLinegraphs(saveFeatures,fileName)
+#compareN(saveFeatures,fileName)
+
+# All UCEs, by bin
+#collectFeatures = pdFeatures.drop(pdFeatures.columns[0],axis=1)
+#stackFeatures = collectFeatures.stack()
+#arArStats = []
+#indexStats = ['all']
+#allStats = getStats(collectFeatures)
+#arArStats.append(allStats)
+
+# Each type of UCE, by bin
+#valFeatures = pdFeatures.groupby([0])
+#for name, group in valFeatures:
+#	group = group.drop(group.columns[0],axis=1)
+#	stack = group.stack()
+#	makeHistograms(name, fileName, stack)
+#	makeHistograms(name+"_byBin", fileName, group)
+#	typeStats = getStats(group)
+#	arArStats.append(typeStats)
+#	indexStats.append(name)
+
+# Make smooth histogram
+#smoothStats(pdFeatures, fileName)
+
+# Make files for AT stats
+#arStatColumns = ['NumObs', 'floatMean', 'float25thPercentile', 'float75thPercentile', 'floatMin', 'floatMax']
+#pdAllStats = pd.DataFrame(data=arArStats, index=indexStats, columns=arStatColumns)
+#pdAllStats.to_csv('ATStatsfor_{0}.txt'.format(fileName), sep='\t')
 
 # Boxplots
 #makeBoxplots(fileName, pdFeatures)
