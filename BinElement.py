@@ -8,9 +8,8 @@
     
     Outputs:
     1 - txt with the id of feature and the % AT content for each bin
-    2 - histogram for % AT content for each type of feature
-    3 - histogram for % AT content at each bin for each type of feature
-    4 - stats for % AT content ( modeled on Ruth's GC_summary_stats4.py )
+    2 - histograms (both smooth, from Ruth's Plot_distances_IQR6 scirpt, and regular) for % AT content for each type of feature, and at each bin for each type of feature
+    3 - stats for % AT content (modeled on Ruth's GC_summary_stats4.py)
     
     Wren Saylor
     January 13 2017
@@ -23,7 +22,7 @@
     2 - try pybedtools alternative functions
     3 - make histograms for the sloped edges around the elements, slop
     4 - find way to keep id and coordinates
-    5 - make 'all' print with the types on the same pdf
+    5 - make 'all' print with the types on the same pdf for the boxplot
     
     """
 
@@ -125,20 +124,21 @@ def smoothStats(pdFeatures, fileName):
         transFeatures['upper_quartile'] = transFeatures.quantile(axis=1,q=0.75)
         outTrans = transFeatures[['0','upper_quartile','median','lower_quartile']]
         outTrans.to_csv('SmoothStatsfor_all_{0}.txt'.format(fileName),index=True,sep="\t")
+        smoothHistplot(outTrans, 'Distances_with_randomIQR_all_{0}'.format(fileName))
         
+        # By type
         typeList = ['exonic','intronic','intergenic']
-        typeListOut = []
         for element in typeList:
             boolType = pdFeatures[pdFeatures[0] == element]
-                transType = boolType.loc[:,1:10].transpose()
+                transType = boolType.loc[:,1:].transpose()
                 intType = transType.astype(int)
+                intType['0'] = intType.mean(axis=1)
                 intType['lower_quantile'] = intType.quantile(axis=1,q=0.25)
                 intType['upper_quantile'] = intType.quantile(axis=1,q=0.75)
                 intType['median'] = intType.median(axis=1)
-                outType = intType[['lower_quantile','median','upper_quantile']]
+                outType = intType[['0','lower_quantile','median','upper_quantile']]
                 outType.to_csv('SmoothStatsfor_{0}_{1}.txt'.format(element,fileName),index=True,sep="\t")
-                typeListOut.append(outType)
-        return typeListOut # Works?
+                smoothHistplot(outType, 'Distances_with_randomIQR_{0}_{1}'.format(element,fileName))
 
 # 6 - make regular histogram
 def makeHistograms(name, fileName, group):
@@ -154,6 +154,62 @@ def makeBoxplots(fileName, group):
         plt.figure()
         g = group.groupby([0]).boxplot(subplots=True,return_type='axes')
         plt.savefig(strFilename,format='pdf', bbox_inches='tight')
+        plt.clf()
+
+# # 8 - Ruth's smooth histogram formating for labels and label locations
+# def getMiddleBinsGetLabels(pdValues):
+# 	seriesXValues = pdValues.ix[:, 0]
+# 	Get distance between bin
+# 	intFirstBinStart = seriesXValues.iloc[0]
+# 	intSecondBinStart = seriesXValues.iloc[1]
+# 	intInterBinDistance = intSecondBinStart - intFirstBinStart
+# 	intHalfBinDistance = int(intInterBinDistance/2)
+# 	Add intHalfBinDistance to each x value
+# 	pdValues.columns = ['bin_start','lower_quartile','median','upper_quartile']
+# 	pdValues['mid_bin'] = pdValues.apply(lambda row: row['bin_start'] + intHalfBinDistance, axis=1)
+# 	pdWithMidBins = pdValues[['mid_bin','lower_quartile','median','upper_quartile']]
+# 	print pdWithMidBins
+# 	Create list of axis labels
+# 	arLabels = []
+# 	arMidBins = pdWithMidBins['mid_bin'].values.tolist()
+# 	for floatMidBin in arMidBins:
+# 		intLower = (floatMidBin-intHalfBinDistance)/1000
+# 		intUpper = (floatMidBin + intHalfBinDistance)/1000
+# 		strLabel = '{0} to {1}'.format(intLower, intUpper)
+# 		arLabels.append(strLabel)
+# 	Thin out the labels if necessary
+# 	intNumberLabels = len(arLabels)
+# 	arThinnedLabels = []
+# 	arLabelPositions = []
+# 	intThin = 1
+# 	for n in range(0, intNumberLabels, intThin):
+# 		thinLabel = arLabels[n]
+# 		arThinnedLabels.append(thinLabel)
+# 		floatLabelPosition = arMidBins[n]
+# 		arLabelPositions.append(floatLabelPosition)
+# 	print arLabelPositions
+# 	return pdWithMidBins, arThinnedLabels, arLabelPositions
+
+# 9 - Ruth's smooth histogram plotting
+def smoothHistplot(pdValues, strName):
+    npX = range(0,len(pdValues))
+        npQuery = pdValues.ix[:, 0].values
+        npUpperQ = pdValues.ix[:, 1].values
+        npMedian = pdValues.ix[:, 2].values
+        npLowerQ = pdValues.ix[:, 3].values
+        tupXlim = (0,len(pdValues))
+        intXLower = tupXlim[0]
+        intXUpper = tupXlim[1]
+        plt.figure(figsize=(6, 4))
+        sns.set_style('ticks')
+        ax = plt.plot(npX, npQuery, linewidth=1, color='orange', label='')
+        plt.plot(npX, npQuery, marker='o', markersize=7, color='orange', clip_on=False)
+        plt.fill_between(npX, npUpperQ, npLowerQ, facecolor='#bdbdbd', edgecolor='#bdbdbd', label = '')
+        sns.despine(offset=5)
+        #sns.axlabel('Distance to nearest breakpoint (Mb)', 'Frequency', fontsize=10)
+        plt.xticks(rotation=45, ha='right')
+        plt.xlim(intXLower, intXUpper)
+        plt.savefig('{0}.pdf'.format(strName), format='pdf', bbox_inches='tight')
         plt.clf()
 
 def main():
@@ -192,7 +248,7 @@ def main():
                         arArStats.append(typeStats)
                         indexStats.append(name)
                 
-                # Make files for smooth histogram
+                # Make smooth histogram
                 smoothStats(pdFeatures, fileName)
                 
                 # Make files for AT stats
