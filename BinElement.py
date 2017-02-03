@@ -118,11 +118,14 @@ def smoothStats(pdFeatures, fileName):
     noIDFeatures = pdFeatures.drop(pdFeatures.columns[[0]],axis=1)
         transposeFeatures = noIDFeatures.transpose()
         transFeatures = transposeFeatures.astype(int)
-        transFeatures['0'] = transFeatures.mean(axis=1)
-        transFeatures['lower_quartile'] = transFeatures.quantile(axis=1,q=0.25)
+        transFeatures['minimum'] = transFeatures.min(axis=1)
+        transFeatures['lower5_quantile'] = transFeatures.quantile(axis=1,q=0.05)
+        transFeatures['lower25_quantile'] = transFeatures.quantile(axis=1,q=0.25)
         transFeatures['median'] = transFeatures.median(axis=1)
-        transFeatures['upper_quartile'] = transFeatures.quantile(axis=1,q=0.75)
-        outTrans = transFeatures[['0','upper_quartile','median','lower_quartile']]
+        transFeatures['upper75_quantile'] = transFeatures.quantile(axis=1,q=0.75)
+        transFeatures['upper95_quantile'] = transFeatures.quantile(axis=1,q=0.95)
+        transFeatures['maximum'] = transFeatures.max(axis=1)
+        outTrans = transFeatures[['maximum','upper95_quantile','upper75_quantile','median','lower25_quantile','lower5_quantile','minimum']]
         outTrans.to_csv('SmoothStatsfor_all_{0}.txt'.format(fileName),index=True,sep="\t")
         smoothHistplot(outTrans, 'Distances_with_randomIQR_all_{0}'.format(fileName))
         
@@ -132,11 +135,14 @@ def smoothStats(pdFeatures, fileName):
             boolType = pdFeatures[pdFeatures[0] == element]
                 transType = boolType.loc[:,1:].transpose()
                 intType = transType.astype(int)
-                intType['0'] = intType.mean(axis=1)
-                intType['lower_quantile'] = intType.quantile(axis=1,q=0.25)
-                intType['upper_quantile'] = intType.quantile(axis=1,q=0.75)
+                intType['minimum'] = intType.min(axis=1)
+                intType['lower5_quantile'] = intType.quantile(axis=1,q=0.05)
+                intType['lower25_quantile'] = intType.quantile(axis=1,q=0.25)
+                intType['upper75_quantile'] = intType.quantile(axis=1,q=0.75)
+                intType['upper95_quantile'] = intType.quantile(axis=1,q=0.95)
                 intType['median'] = intType.median(axis=1)
-                outType = intType[['0','lower_quantile','median','upper_quantile']]
+                intType['maximum'] = intType.max(axis=1)
+                outType = intType[['maximum','upper95_quantile','upper75_quantile','median','lower25_quantile','lower5_quantile','minimum']]
                 outType.to_csv('SmoothStatsfor_{0}_{1}.txt'.format(element,fileName),index=True,sep="\t")
                 smoothHistplot(outType, 'Distances_with_randomIQR_{0}_{1}'.format(element,fileName))
 
@@ -193,22 +199,28 @@ def makeBoxplots(fileName, group):
 # 9 - Ruth's smooth histogram plotting
 def smoothHistplot(pdValues, strName):
     npX = range(0,len(pdValues))
-        npQuery = pdValues.ix[:, 0].values
-        npUpperQ = pdValues.ix[:, 1].values
-        npMedian = pdValues.ix[:, 2].values
-        npLowerQ = pdValues.ix[:, 3].values
+        npMax = pdValues.ix[:, 0].values
+        npUppestQ = pdValues.ix[:, 1].values
+        npUpperQ = pdValues.ix[:, 2].values
+        npMedian = pdValues.ix[:, 3].values
+        npLowerQ = pdValues.ix[:, 4].values
+        npLowestQ = pdValues.ix[:, 5].values
+        npMin = pdValues.ix[:, 6].values
         tupXlim = (0,len(pdValues))
         intXLower = tupXlim[0]
         intXUpper = tupXlim[1]
         plt.figure(figsize=(6, 4))
         sns.set_style('ticks')
-        ax = plt.plot(npX, npQuery, linewidth=1, color='orange', label='')
-        plt.plot(npX, npQuery, marker='o', markersize=7, color='orange', clip_on=False)
-        plt.fill_between(npX, npUpperQ, npLowerQ, facecolor='#bdbdbd', edgecolor='#bdbdbd', label = '')
+        ax = plt.plot(npX, npMedian, linewidth=1, color='#543005', label='')
+        plt.plot(npX, npMedian, marker='o', markersize=7, color='#543005', clip_on=False)
+        plt.fill_between(npX, npMax, npMin, facecolor='#f6e8c3', edgecolor='#f6e8c3', label = '')
+        plt.fill_between(npX, npUppestQ, npLowestQ, facecolor='#dfc27d', edgecolor='#dfc27d', label = '')
+        plt.fill_between(npX, npUpperQ, npLowerQ, facecolor='#bf812d', edgecolor='#bf812d', label = '')
         sns.despine(offset=5)
         #sns.axlabel('Distance to nearest breakpoint (Mb)', 'Frequency', fontsize=10)
         plt.xticks(rotation=45, ha='right')
         plt.xlim(intXLower, intXUpper)
+        plt.ylim(0,100)
         plt.savefig('{0}.pdf'.format(strName), format='pdf', bbox_inches='tight')
         plt.clf()
 
