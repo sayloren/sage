@@ -27,7 +27,12 @@
     7 - count of first and last 10 sums, as line graph
     8 - contingency tables
     9 - karyograms
-    10 - make a list of things to chunk
+    10 - make a list of things to chunk, add the size of chunks to the filenames
+    11 - separate A from T
+    12 - separate smooth stats data by directionality
+    13 - better axis on graphs, scaled and labeled
+    14 - stats for each graph on importance
+    15 - examine flanks
     
     """
 
@@ -232,7 +237,9 @@ def smoothHistplot(pdValues, strName):
 # 10 - out put directionality, as inferred by comparing first and last n base pairs
 def compareN(saveFeatures,fileName):
     outDoc = []
-        endSize = [5, 10, 20, 30]
+        outColumns = ['type','five','ten','twenty','thirty']
+        outDoc.append(outColumns)
+        endSize = [5, 10, 20, 30] # tie brakers?
         for feature in SeqIO.parse(saveFeatures, "fasta"):
             featureID, featureSeq = feature.id[:], feature.seq[:] # perhaps could retrieve coordinates here?
                 outList = []
@@ -243,8 +250,8 @@ def compareN(saveFeatures,fileName):
                         perSize = []
                         perSize.append(eval('100*int(start.count("A") + start.count("a") + start.count("T") + start.count("t"))/len(start)'))
                         perSize.append(eval('100*int(end.count("A") + end.count("a") + end.count("T") + end.count("t"))/len(end)'))
-                        #outList.append(size)
-                        #outList.append(perSize)
+                        #outList.append(size) # uncomment if want the size of the end in the dataframe
+                        #outList.append(perSize) # uncomment if want the values compared in the dataframe
                         if perSize[0] > perSize[1]: outList = outList + ['+']
                         if perSize[1] > perSize[0]: outList = outList + ['-']
                         if perSize[1] == perSize[0]: outList = outList + ['=']
@@ -253,38 +260,63 @@ def compareN(saveFeatures,fileName):
         savePanda(compareEnds,'Directionality_results_for_all_{0}.txt'.format(fileName))
         typeList = ['exonic','intronic','intergenic']
         for element in typeList:
-            boolType = compareEnds[compareEnds[0] == element]
+            boolType = (compareEnds[compareEnds[0] == element])
+                boolType.loc[-1]= ['type','five','ten','twenty','thirty'] # make sure have the same number as number of endSizes
+                boolType.index = boolType.index + 1
+                boolType = boolType.sort_index()
                 savePanda(boolType,'Directionality_results_for_{0}_{1}.txt'.format(element,fileName))
-# print by direction? for ease in input with karyographs? - need coordinates for karyograph!!
+# print by direction? for ease in input with karyographs? - need coordinates!!
+# subset smooth histograms by directionality
 
 # 11 - fangs
-# Still need to think about how this should be done, sliding window?
+# Use avg bin size to grab n number of flanking bins
 
 # 12 - line graphs of UCE ends
 def endLinegraphs(saveFeatures,fileName):
-    outDoc = []
+    outStart = []
+        outEnd = []
+        NumFromEnd = 10
         for feature in SeqIO.parse(saveFeatures, "fasta"):
-            outList = []
-                featureID, featureSeq = feature.id[:], feature.seq[:]
-                outList.append(featureID)
-                start = featureSeq[:10]
-                end = featureSeq[-10:]
-                outList.append(eval('100*int(start.count("A") + start.count("a") + start.count("T") + start.count("t"))/len(start)'))
-                outList.append(eval('100*int(end.count("A") + end.count("a") + end.count("T") + end.count("t"))/len(end)'))
-                outDoc.extend([outList])
-        compareEnds = pd.DataFrame(outDoc)
-    print compareEnds
-# but this needs to be the sum of the individual positions, not the total AT%
+            featureID, featureSeq = feature.id[:], feature.seq[:]
+                startList = [[featureID, featureSeq[:10].upper()]]
+                endList = [[featureID, featureSeq[-10:].upper()]]
+                outStart.extend(startList)
+                outEnd.extend(endList)
+        pdStart = pd.DataFrame(outStart)
+        for i in range(NumFromEnd):
+            pdStart[str(i)] = pdStart[1].str[i]
+        pdEnd = pd.DataFrame(outEnd)
+        for i in range(NumFromEnd):
+            pdEnd[str(i)] = pdEnd[1].str[i]
+        featureList = ['exonic','intronic','intergenic']
+        for feature in featureList:
+            boolStartelement = (pdStart[pdStart[0] == feature])
+                boolStart = (boolStartelement.ix[:,2:][boolStartelement.isin(['A','T'])])
+                boolEndelement = (pdEnd[pdEnd[0] == feature])
+                boolEnd = (boolEndelement.ix[:,2:][boolEndelement.isin(['A','T'])])
+                sumStart = boolStart.isnull().sum() # counting the NaNs
+                totStart = boolStartelement.count()
+                sumEnd = boolEnd.isnull().sum() # counting the NaNs
+                totEnd = boolEndelement.count()
+                f, (ax1,ax2) = plt.subplots(1,2, figsize=(14,5))
+                ax1.plot(sumStart)
+                ax2.plot(sumEnd)
+                plt.savefig('AT_Sum_10_elements_from_edge_for_{0}_{1}.pdf'.format(feature,fileName), format='pdf', bbox_inches='tight')
+                plt.clf()
+# axes need to be adjusted
 
 # 13 - contingency tables
 
 def main():
+    
+    # Collect arguments
     args = get_args()
         aFiles = [line.strip() for line in args.file]
         sizeChunk = args.chunks
         sizeGenome = args.genome
         faGenome = args.fasta
-        # for file in master txt file
+        
+        # Collect and processes files
         for fileName in aFiles:
             btFeatures = eachFileProcess(fileName)
                 saveFeatures = getFasta(btFeatures,faGenome,fileName)
@@ -293,19 +325,21 @@ def main():
                     chunkFeatures = getChunks(seq_record, sizeChunk)
                         allFeatures.extend([chunkFeatures])
                 pdFeatures = pd.DataFrame(allFeatures)
-                savePanda(pdFeatures,"Bin_type_result_for_{0}.txt".format(fileName))
-            endLinegraphs(saveFeatures,fileName)
+            savePanda(pdFeatures,"Bin_type_result_for_{0}.txt".format(fileName))
+
+# Make line graphs for UCE ends summed
+#endLinegraphs(saveFeatures,fileName)
+
+# Get Directionality by comparing AT content for n bases
 #compareN(saveFeatures,fileName)
 
-# All UCEs, by bin
+# Get AT stats, make histograms
 #collectFeatures = pdFeatures.drop(pdFeatures.columns[0],axis=1)
 #stackFeatures = collectFeatures.stack()
 #arArStats = []
 #indexStats = ['all']
 #allStats = getStats(collectFeatures)
 #arArStats.append(allStats)
-
-# Each type of UCE, by bin
 #valFeatures = pdFeatures.groupby([0])
 #for name, group in valFeatures:
 #	group = group.drop(group.columns[0],axis=1)
@@ -319,7 +353,7 @@ def main():
 # Make smooth histogram
 #smoothStats(pdFeatures, fileName)
 
-# Make files for AT stats
+# Make AT stats files
 #arStatColumns = ['NumObs', 'floatMean', 'float25thPercentile', 'float75thPercentile', 'floatMin', 'floatMax']
 #pdAllStats = pd.DataFrame(data=arArStats, index=indexStats, columns=arStatColumns)
 #pdAllStats.to_csv('ATStatsfor_{0}.txt'.format(fileName), sep='\t')
