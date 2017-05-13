@@ -424,11 +424,6 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         plt.xlim(0,num)
         pp.savefig()
         
-        (((num-uce)/2)+(inuce-halfwindow))# 245
-        (((num-uce)/2)+(uce-inuce-halfwindow)) # 345
-        (((num-uce)/2)-halfwindow) # 195
-        (((num-uce)/2)+uce-halfwindow)# 395
-        
         gs = gridspec.GridSpec(3,3,height_ratios=[2,1,1])
         gs.update(hspace=.65)
         ax9 = plt.subplot(gs[0,:])
@@ -450,7 +445,7 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         ax10.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
         ax10.axvspan((((num-uce)/2)+(inuce-halfwindow)),(((num-uce)/2)+(uce-inuce-halfwindow)),facecolor = '#ae3e9e',label='',alpha=0.1) # 245, 345
         ax10.axvspan(inuce,(((num-uce)/2)-inuce),facecolor = '#863eae',label='',alpha=0.1) # 50, 150
-        ax10.axvspan(460,560,facecolor = '#ae3e66',label='',alpha=0.1)
+        ax10.axvspan((num-window-(((num-uce)/2)-inuce)),(num-window-inuce),facecolor = '#ae3e66',label='',alpha=0.1) # 439,539
         ax10.set_yticks([-.5,0,.5])
         ax10.set_xlabel('Position',size=6)
         ax10.set_ylabel('Amplitude',size=8)
@@ -475,7 +470,7 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         frq3sd = frq3sd[range(n3sd/2)]
         Y3sd = np.fft.fft(y3sd)/n3sd
         Y3sd = Y3sd[range(n3sd/2)]
-        y4sd = firstDer[460:560] # [-window:]
+        y4sd = firstDer[(num-window-(((num-uce)/2)-inuce)):(num-window-inuce)]#439,539
         n4sd = len(y4sd)
         k4sd = np.arange(n4sd)
         T4sd = n4sd/Fs
