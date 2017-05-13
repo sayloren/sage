@@ -2,86 +2,147 @@
     Script to make fangs and do some further proccessing
     
     Inputs:
-    1 - txt file with the list of feature files to process, each bed file should have coordinates and type for fourth column
+    1 - txt file with the list of feature files to process, each bed file should have coordinates, id for fourth and type for fifth column
     2 - genome file with size of all chromosomes
     3 - fasta file for whole genome
-    
-    Outputs:
-    Fasta for features
-    Graphs for Fangs
-    File for directionality
+    4 - bed file with bi-sulfide methylation direction and percentage
     
     Wren Saylor
     January 13 2017
     
-    To Do:
-    Make the passing to the graphs more neat
-    Print number of - + = on plot
-    Separate A T
-    Stats for significance
-    Global organization
-    Middle data
-    Diff each UCE, graph, then graph stat for diffs of each type
-    Use rate of change to get fang threshold for each UCE, return number of UCEs with 1/2/0 fangs
-    label graphs (fang location, significance)
-    try chaning sliding window size
-    
     """
 
 import argparse
-import pandas as pd
-import seaborn as sns
-import numpy as np
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import pybedtools as pbt
 import Bio
 from Bio import SeqIO
 from Bio import Seq
-import re
-import numdifftools as nd
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-# from matplotlib_scalebar.scalebar import ScaleBar
+import matplotlib.patches as patches
+from matplotlib.backends.backend_pdf import PdfPages
+from numpy import sin, linspace, pi
+import numdifftools as nd
+import numpy as np
+import numpy.ma as ma
+import pandas as pd
+import pybedtools as pbt
+import re
+import scipy.fftpack
+from scipy.interpolate import splrep, splev
+from scipy import signal as ssignal
+import scipy as sp
+import scipy.stats as ss
+from scipy.stats import mstats
+import seaborn as sns
+import tempfile
 
+# set command line arguments
 def get_args():
     parser = argparse.ArgumentParser(description="Description")
-        parser.add_argument("file", type=argparse.FileType('rU'), help='A file containing a list of paths to the files separated by newlines')
+        parser.add_argument("efile", type=argparse.FileType('rU'), help='A file containing a list of paths to the element files with unique names separated by newlines')
         # GENOME FILES
+        parser.add_argument("mfile", type=argparse.FileType('rU'), help="A file containing a list of paths to the methylation files with unique names separated by newlines, with data for methylation position (chr, start,stop) and methylation % as fourth column'")
         parser.add_argument("-g", "--genome", type=str, default="hg19.genome")
+        #parser.add_argument("-n", "--nucleosome", type=str, help="A bedgraph file with data for nucleosome positions, form 'chr, start, stop, occupancy'")
+        #parser.add_argument("-s", "--snp", type=str, help="A file with data for snps, form 'chr, start, stop(start+size alt-mutated), ref, ref_size, alt, alt_size, af_adj'")
         parser.add_argument("-fa", "--fasta", type=str, default="hg19.fa")
         return parser.parse_args()
 
-# 1 - read in files
+# read in files
 def eachFileProcess(fileName):
     btFeatures = pbt.BedTool(fileName)
         return btFeatures
 
-# 2 - get bt features
+# get bt features
 def getFeatures(strFileName):
     btFeatures = pbt.BedTool(strFileName)
         return btFeatures
 
-# 3 - get the correct range for fang evaluation
-def getRange(btFeatures,fileName):
-    # for each type in list of element type
-    midFeatures = pd.read_table(btFeatures.fn, header=None)
+# get the correct range for fang evaluation
+def getRange(btFeatures,fileName,num,uce,inuce):
+    flankSize = (num - uce)/2
+        midFeatures = pd.read_table(btFeatures.fn, header=None)
         midFeatures['middle'] = midFeatures.loc[:,1:2].mean(axis=1).astype(int)
-        midFeatures['sCenter'] = midFeatures['middle'] - 50
-        midFeatures['eCenter'] = midFeatures['middle'] + 50
-        midFeatures['sEdge'] = midFeatures.loc[:,1] + 50
-        midFeatures['eEdge'] = midFeatures.loc[:,2] - 50
-        midFeatures['sBoundary'] = midFeatures.loc[:,1] - 200
-        midFeatures['eBoundary'] = midFeatures.loc[:,2] + 200
+        midFeatures['sCenter'] = midFeatures['middle'] - inuce
+        midFeatures['eCenter'] = midFeatures['middle'] + inuce
+        midFeatures['sEdge'] = midFeatures.loc[:,1] + inuce
+        midFeatures['eEdge'] = midFeatures.loc[:,2] - inuce
+        midFeatures['sBoundary'] = midFeatures.loc[:,1] - flankSize
+        midFeatures['eBoundary'] = midFeatures.loc[:,2] + flankSize
         midFeatures['start'] = midFeatures.loc[:,1]
         midFeatures['end'] = midFeatures.loc[:,2]
-        midFeatures['type'] = midFeatures.loc[:,3]
+        midFeatures['type'] = midFeatures.loc[:,4]
+        midFeatures['id'] = midFeatures.loc[:,3]
         midFeatures['chr'] = midFeatures.loc[:,0]
-        rangeFeatures = midFeatures[['type','chr','sBoundary', 'start', 'sEdge', 'sCenter','eCenter','eEdge','end','eBoundary']]
+        midFeatures['size'] = midFeatures.loc[:,2].astype(int)-midFeatures.loc[:,1].astype(int)
+        rangeFeatures = midFeatures[['type','id','size','chr','sBoundary', 'start', 'sEdge', 'sCenter','eCenter','eEdge','end','eBoundary']] #,'starttwohund','endtwohund'
         return rangeFeatures
 
-# 4 - get fasta strings for each desired region
+# save file from bedtool
+def saveBedTool(btObject, strFilename):
+    btObject.saveas(strFilename)
+
+# convert bedtool to panda
+# If there is nothing in the btobject, will it read the data from the previous itteration!?
+def bedtoolToPanda(btobject):
+    saveBedTool(btobject,'temp.bed')
+        pdObject = pd.read_table(btobject.fn, header=None)
+        return pdObject
+
+# intersect the methylation file with the elements
+def methIntersect(rangeFeatures,methFeature,num,uce,inuce):
+    methSBoundary = methFeature.intersect(rangeFeatures[['chr','sBoundary','sEdge','id']].values.tolist(),wb=True,wa=True)
+        pdmethSBoundary = bedtoolToPanda(methSBoundary)
+        pdmethSBoundary['intAdd'] =  0
+        pdmethSBoundary.columns = ['mchr','mstart','mstop','methPer','chr','sBoundary','sEdge','id','intAdd']
+        pdmethSBoundary['methLoc'] = pdmethSBoundary['sEdge'].astype(int)-pdmethSBoundary['mstop'].astype(int)+pdmethSBoundary['intAdd'].astype(int) # or just count?
+        outpdmethSBoundary = pdmethSBoundary[['id','methPer','methLoc']]
+        methMiddle = methFeature.intersect(rangeFeatures[['chr','sCenter','eCenter','id']].values.tolist(),wb=True,wa=True)
+        pdmethFeature = bedtoolToPanda(methMiddle)
+        pdmethFeature['intAdd'] = (((num - uce)/2) + inuce)
+        pdmethFeature.columns = ['mchr','mstart','mstop','methPer','chr','sCenter','eCenter','id','intAdd']
+        pdmethFeature['methLoc'] = pdmethFeature['eCenter'].astype(int)-pdmethFeature['mstop'].astype(int)+pdmethFeature['intAdd'].astype(int) # or just count?
+        outpdmethFeature = pdmethFeature[['id','methPer','methLoc']]
+        methEBoundary = methFeature.intersect(rangeFeatures[['chr','eEdge','eBoundary','id']].values.tolist(),wb=True,wa=True)
+        pdmethEBoundary = bedtoolToPanda(methEBoundary)
+        pdmethEBoundary['intAdd'] = (((num - uce)/2) + (uce - inuce))
+        pdmethEBoundary.columns = ['mchr','mstart','mstop','methPer','chr','eEdge','eBoundary','id','intAdd']#,'methDir'
+        pdmethEBoundary['methLoc'] = pdmethEBoundary['eBoundary'].astype(int)-pdmethEBoundary['mstop'].astype(int)+pdmethEBoundary['intAdd'].astype(int) # or just count?
+        outpdmethEBoundary = pdmethEBoundary[['id','methPer','methLoc']]
+        methList = [outpdmethSBoundary,outpdmethFeature,outpdmethEBoundary]
+        concatMeth = pd.concat(methList)
+        #threshMeth = (concatMeth[(concatMeth['methPer'] >= 50)]) # subset for % methylation over 50
+        sortMeth = concatMeth.sort_values(['methLoc'],ascending=True)
+        #if want to collect by id, for use of cpg population http://stackoverflow.com/questions/10373660/converting-a-pandas-groupby-object-to-dataframe
+        #groupMeth = sortMeth.groupby(['id'])['methLoc'].apply(list).to_frame(name = 'groupMeth').reset_index()
+        return sortMeth
+
+# collect methylation frequencies by position of elements
+def methylationFreq(methPosition,num): # concatMeth from methIntersect
+    new_index = range(0,num)
+        subsetMeth = methPosition[['methLoc','methPer']]
+        subsetMeth['methFreq'] = subsetMeth.groupby(['methLoc'])['methPer'].transform('count')
+        dupMeth = subsetMeth.sort_values(['methLoc'],ascending=True).drop_duplicates(['methLoc','methFreq']) # returns highest value of methylation
+        methIndex = dupMeth.set_index('methLoc').reindex(new_index,fill_value=0)
+        methIndex.index.name = None
+        intMeth = methIndex.astype(int)
+        return intMeth
+
+# get methylation positions for all methylation files
+def methPositions(mFiles,rangeFeatures,num,uce,inuce):
+    outMeth = []
+        for methName in mFiles:
+            methFeatures = eachFileProcess(methName)
+                methPosition = methIntersect(rangeFeatures,methFeatures,num,uce,inuce)
+                methFreq = methylationFreq(methPosition,num)
+                methFreq.columns = ['{0}_Percentage'.format(methName),'{0}_Frequency'.format(methName)]
+                outMeth.append(methFreq)
+        pdMeth = pd.concat(outMeth,axis=1)
+    return pdMeth
+
+# get fasta strings for each desired region
 def getFasta(btFeatures,faGenome,fileName):
-    # Just the fasta files for the UCEs
     saveAll = 'Seq_result_for_all_{0}.txt'.format(fileName)
         seqAll = btFeatures.sequence(fi=faGenome,fo=saveAll)
         saveExonic = 'Seq_results_for_exonic_{0}.txt'.format(fileName)
@@ -92,7 +153,7 @@ def getFasta(btFeatures,faGenome,fileName):
         seqIntergenic = btFeatures.sequence(fi=faGenome,fo=saveIntergenic).filter(lambda x: x[name] == 'intergenic')
         return saveAll, saveExonic, saveIntronic, saveIntergenic
 
-# 5 - used in btRange to extract just the fasta strings
+# used in btRange to extract just the fasta strings
 def simpleFasta(inFeature,faGenome):
     seqFeature = inFeature.sequence(fi=faGenome)
         outFeature = pd.read_table(seqFeature.seqfn)
@@ -100,270 +161,539 @@ def simpleFasta(inFeature,faGenome):
         outSequence = outSequence.reset_index(drop=True)
         return outSequence
 
-# 6 - get the strings for sliding window regions
-def btRange(rangeFeatures,faGenome):
-    # Now the fasta files with the ranged regions
+# get the strings for sliding window regions
+def btRange(rangeFeatures,faGenome):#,methFeature
     rangeFeatures['sBoundarySeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','sBoundary','start']].values.tolist()),faGenome)
         rangeFeatures['sEdgeSeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','start','sEdge']].values.tolist()),faGenome)
         rangeFeatures['MiddleSeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','sCenter','eCenter']].values.tolist()),faGenome)
         rangeFeatures['eEdgeSeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','eEdge','end',]].values.tolist()),faGenome)
         rangeFeatures['eBoundarySeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','end','eBoundary']].values.tolist()),faGenome)
         rangeFeatures['feature'] = simpleFasta(getFeatures(rangeFeatures[['chr','start','end']].values.tolist()),faGenome)
-        #rangeFeatures['combineString'] = rangeFeatures[['sBoundarySeq','sEdgeSeq','MiddleSeq','eEdgeSeq','sBoundarySeq']].apply(lambda x: ''.join(x),axis=1)
         rangeFeatures['combineString'] = rangeFeatures['sBoundarySeq'].astype(str) + rangeFeatures['sEdgeSeq'].astype(str) + rangeFeatures['MiddleSeq'].astype(str) + rangeFeatures['eEdgeSeq'].astype(str) + rangeFeatures['eBoundarySeq'].astype(str)
         rangeFeatures['combineString'] = rangeFeatures['combineString'].str.upper()
+        rangeFeatures['feature'] = rangeFeatures['feature'].str.upper()
+        rangeFeatures['reverseComplement'] = rangeFeatures.apply(lambda row: reverseComplement(row['combineString']),axis=1)
+        # 	methPosition = methIntersect(rangeFeatures,methFeature)
+        # 	outFeatures = pd.merge(rangeFeatures,methPosition,left_on='id',right_on='id',how='outer',indicator=True) #perhaps want to change indicator and how args
+        # 	outFeatures['groupMeth'].fillna('[-999]',inplace=True) #,-999 have to trick into accepting a list, for iterating through later
         return rangeFeatures
 
-# 7 - sliding window
-def slidingWindow(element):
+# sliding window
+def slidingWindow(element,num,uce,inuce,window):
     winFeatures = []
+        winCpG = []
         winA = []
         winT = []
         winG = []
         winC = []
-        n = 600 # take out hard coding
-        start, end = 0, 11 # possibly make larger sliding window?
+        winMotif = []
+        n = num #600 # len(element) # take out hard coding
+        start, end = 0, window
         while end < n:
             current = element[start:end]
                 percentageAT = eval('100 * float(current.count("A") + current.count("T"))/ len(current)')
+                percentageCpG = eval('100 * float(current.count("CG")) / len(current)')
                 perA = eval('100 * float(current.count("A"))/ len(current)')
                 perT = eval('100 * float(current.count("T"))/ len(current)')
                 perG = eval('100 * float(current.count("G"))/ len(current)')
                 perC = eval('100 * float(current.count("C"))/ len(current)')
+                perMo = eval('100 * float(current.count("ATTAAT")) / len(current)')
                 winFeatures.append(percentageAT)
+                winCpG.append(percentageCpG)
                 winA.append(perA)
                 winT.append(perT)
                 winG.append(perG)
                 winC.append(perC)
+                winMotif.append(perMo)
                 start, end = start + 1, end + 1
-        # print start, end  # a check, to make sure that the string is the correct size
-    return winFeatures, winA, winT, winG, winC
+        return winFeatures, winCpG, winA, winT, winG, winC, winMotif
 
-# 8 - make some graphs!
-def endLinegraphs(pdWindow,pdA,pdT,pdG,pdC,fileName):
-    fillX = range(0,589) # not 600 because of the sliding window
+# append results from sliding window
+def appendWindow(rangeFeatures,num,uce,inuce,window):
+    outWindow = []
+        outCpG = []
+        outA = []
+        outT = []
+        outG = []
+        outC = []
+        outMo = []
+        for element in rangeFeatures['combineString']:
+            outFeature, winCpG, winA, winT, winG, winC, winMo = slidingWindow(element,num,uce,inuce,window)
+                outWindow.append(outFeature)
+                outCpG.append(winCpG)
+                outA.append(winA)
+                outT.append(winT)
+                outG.append(winG)
+                outC.append(winC)
+                outMo.append(winMo)
+        return outWindow, outCpG, outA, outT, outG, outC, outMo
+
+# run append to sliding window and return pandas data frames
+def dataframeWindow(rangeFeatures,num,uce,inuce,window):
+    outWindow, outCpG, outA, outT, outG, outC, outMo = appendWindow(rangeFeatures,num,uce,inuce,window)
+        pdWindow = pd.DataFrame(outWindow)
+        pdCpG = pd.DataFrame(outCpG)
+        pdA = pd.DataFrame(outA)
+        pdT = pd.DataFrame(outT)
+        pdG = pd.DataFrame(outG)
+        pdC = pd.DataFrame(outC)
+        pdMo = pd.DataFrame(outMo)
+        return pdWindow, pdCpG, pdA, pdT, pdG, pdC, pdMo
+
+# make some graphs!
+def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,inuce,window):
+    fillX = range(0,(num-window))
+        halfwindow = ((window/2)+1)
         sns.set_style('ticks')
-        fig = plt.figsize=(14,7)
-        gs = gridspec.GridSpec(5,1,height_ratios=[2,3,3,1,1])
-        gs.update(hspace=.5)
+        gs = gridspec.GridSpec(3,3,height_ratios=[3,1,1]) # for the ratios of the graphs against each other
+        gs.update(hspace=.8) # setting the space between the graphs
         info = str(fileName) + ', '+ str(len(pdWindow)) + ' - ' "UCES"
-        plt.suptitle(info,fontsize=14)
-        
+        plt.suptitle(info,fontsize=10)
+        mean = pdWindow.mean()
+        #maX = np.ma.masked_where(240<fillX<250 & 340<fillX<350, fillX) # tried to make a mast for gapped data
+        pp = PdfPages('Fangs_{0}.pdf'.format(fileName))
         # Plot the mean AT content with a std of 1
-        ax2 = plt.subplot(gs[1])
-        #ax2.update(hspace=1)
-        ax2.plot(fillX,pdWindow.mean(axis=0),linewidth=1, color='#081d58')
-        ax2.fill_between(fillX,pdWindow.mean(axis=0)+pdWindow.std(axis=0,ddof=1), pdWindow.mean(axis=0)-pdWindow.std(axis=0,ddof=1),facecolor = '#081d58',label='',alpha=0.4)
-        ax2.axvline(x=195,linewidth=5,color='#ae017e',alpha=0.3)
-        ax2.axvline(x=395,linewidth=5,color='#ae017e',alpha=0.3)
-        ax2.axvline(x=195,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax2.axvline(x=395,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax2.set_xticks([])
-        ax2.set_yticks([30,60,90])
-        ax2.set_title('Mean AT Content',size=10)
-        # 	scalebar = ScaleBar(0.01) # 1 pixel = 0.2 meter
-        # 	plt.gca().add_artist(scalebar)
-        
-        
+        # NEED TO USE THE RATE CHANGE GRAPH TO GET THE LOCATIONS TO FIND FANG!! .diff()
+        # 	maxStartY = int(mean[150:250].max())
+        # 	maxStopY = int(mean[350:450].max())
+        # 	minStartY = int(mean[150:250].min())
+        # 	minStopY = int(mean[350:450].min())
+        # 	maxStartX = fillX[mean[150:250].argmax(maxStartY)]
+        # 	maxStopX = fillX[mean[350:450].argmax(maxStopY)]
+        # 	minStartX = fillX[mean[150:250].argmin(minStartY)]
+        # 	minStopX = fillX[mean[350:450].argmin(minStopY)]
+        StartMean = pdWindow.loc[:,(((num-uce)/2)-halfwindow-window):(((num-uce)/2)+(inuce-halfwindow))].mean(axis=0) # 185*:245 - trying to just have the boundary and 50inward (184)
+        StopMean = pdWindow.loc[:,(((num-uce)/2)+(uce-inuce-halfwindow)):(((num-uce)/2)+uce-(halfwindow-window))].mean(axis=0) # 345:*405 - trying to just have the boundary and 50inward (406)
+        #StopMean.iloc[::-1]
+        wilcoxPSRMean = ss.wilcoxon(StartMean,StopMean)
+        ax0 = plt.subplot(gs[0,:])
+        ax0.plot(fillX,pdWindow.mean(axis=0),linewidth=1, color='#3e1638',label='AT')
+        ax0.fill_between(fillX,pdWindow.mean(axis=0)+pdWindow.std(axis=0,ddof=1), pdWindow.mean(axis=0)-pdWindow.std(axis=0,ddof=1),facecolor = '#63245a',label='',alpha=0.3)
+        ax0.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a') # 245
+        ax0.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a') # 345
+        ax0.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973') # 195
+        ax0.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973') # 395
+        ax0.hlines(y=86,xmin=20,xmax=31,linewidth=.5,color='#081d58',zorder=0)
+        ax0.text(32,85,'11bp sliding window',size=6)
+        # 	ax0.text(201,85,str(maxStartX)+','+str(maxStartY),size=6)
+        # 	ax1.text(401,85,str(maxStopX)+','+str(maxStopY),size=6)
+        # 	ax1.text(201,35,str(minStartX)+','+str(minStartY),size=6)
+        # 	ax1.text(401,35,str(minStopX)+','+str(minStopY),size=6)
+        ax0.text(230,85,'Wilcox Signed Rank P-value {:0.1e}'.format(wilcoxPSRMean[1]),size=6,clip_on=False)
+        ax0.set_yticks([30,60,90])
+        ax0.set_ylabel('% AT Content',size=8)
+        ax0.set_xlabel('Position',size=6)
+        ax0.legend(loc=0,fontsize=5,labelspacing=0.1)
+        ax0.set_title('Mean AT Content With Standard Deviation',size=8)
         # Plot the std = 1
-        ax1 = plt.subplot(gs[0])
-        #ax1.update(hspace=1)
-        ax1.plot(fillX,pdWindow.std(axis=0,ddof=1),linewidth=1, color='#081d58')
-        ax1.axvline(x=195,linewidth=5,color='#ae017e',alpha=0.3)
-        ax1.axvline(x=395,linewidth=5,color='#ae017e',alpha=0.3) # not sure how to set the size to that of the sliding window
-        ax1.axvline(x=195,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax1.axvline(x=395,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax1.set_xticks([])
-        ax1.set_yticks([14,17,20])
-        ax1.set_title('Standard Deviation, DOF=1',size=10)
+        ax1 = plt.subplot(gs[1,:])
+        ax1.plot(fillX,pdWindow.std(axis=0,ddof=1),linewidth=1, color='#3e1638',label='AT')
+        ax1.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax1.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax1.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax1.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax1.axvspan(0,(((num-uce)/2)-halfwindow),facecolor = '#863eae',label='',alpha=0.1) # 0,195
+        ax1.axvspan((((num-uce)/2)-halfwindow),(((num-uce)/2)+uce-halfwindow),facecolor = '#ae3e9e',label='',alpha=0.1) #195,395
+        ax1.axvspan((((num-uce)/2)+uce-halfwindow),(num-window),facecolor = '#ae3e66',label='',alpha=0.1) # 395,589
+        ax1.set_yticks([12,16,20])
+        ax1.set_xlabel('Position',size=6)
+        ax1.set_ylabel('SD',size=8)
+        ax1.set_title('Standard Deviation',size=8) #, With One Degree of Freedom
+        ax1.legend(loc=0,fontsize=5,labelspacing=0.05)
+        plt.xlim(0,num)
+        # Significances tests for SD populations
+        upStream = pdWindow.loc[:,0:(((num-uce)/2)-halfwindow)].std(axis=0,ddof=1) # 0,195
+        downStream = pdWindow.loc[:,(((num-uce)/2)+uce-halfwindow):(num-window)].std(axis=0,ddof=1) # 395,589
+        uceRegion = pdWindow.loc[:,(((num-uce)/2)-halfwindow):(((num-uce)/2)+uce-halfwindow)].std(axis=0,ddof=1) ##195,395
+        bothStream = pdWindow.iloc[:,np.r_[0:(((num-uce)/2)-halfwindow),(((num-uce)/2)+uce-halfwindow):(num-window)]].std(axis=0,ddof=1) # 0,195,395,589
+        # Kruskal-Wallis test
+        # 	kruskalUP = mstats.kruskalwallis(upStream,uceRegion)#$p.value
+        # 	kruskalDown = mstats.kruskalwallis(downStream,uceRegion)
+        # 	kruskalBoth = mstats.kruskalwallis(upStream,downStream)
+        # 	dfKruskal = pd.DataFrame(['{:0.2e}'.format(kruskalBoth[1]),'{:0.2e}'.format(kruskalUP[1]),'{:0.2e}'.format(kruskalDown[1])],index =['Up - Down','Up - UCE','Down - UCE'])
+        kruskalSD = mstats.kruskalwallis(bothStream,uceRegion)
+        ax2 = plt.subplot(gs[2,0])
+        ax2.hist(upStream,35,linewidth=0.3, color='#3e1638',label='UpStream',alpha=0.7)
+        ax2.set_ylabel('Frequency',size=8)
+        ax2.set_xlabel('SD Value',size=6)
+        ax3 = plt.subplot(gs[2,1],sharey=ax2)
+        # 	ax3.text(16.75,11,'B P-value {:0.1e}'.format(bartlettSD[1]),size=6)
+        # 	ax5.text(16.75,17,'KS P-value {:0.1e}'.format(kolmogorovSD[1]),size=6,clip_on=False)
+        # 	ax5.text(16.75,14,'AD P-value {:0.1e}'.format(andersonSD[2]),size=6,clip_on=False)
+        ax3.text(16.25,14.5,'KW P-value {:0.1e}'.format(kruskalSD[1]),size=6,clip_on=False)
+        plt.setp(ax3.get_yticklabels(), visible=False)
+        ax3.hist(uceRegion,35,linewidth=0.3, color='#ae3e9e',label='UpStream',alpha=0.7)
+        ax3.set_title('Standard Deviation Frequency for Highlighted Regions',size=8)
+        ax3.set_xlabel('SD Value',size=6)
+        ax4 = plt.subplot(gs[2,2],sharey=ax2)
+        plt.setp(ax4.get_yticklabels(), visible=False)
+        ax4.hist(downStream,35,linewidth=0.3, color='#ae3e66',label='UpStream',alpha=0.7)
+        ax4.set_xlabel('SD Value',size=6)
+        # Table for Kruskal Test P-value results
+        # 	ax7 = plt.subplot(gs[3,3])
+        # 	ax7.set_frame_on(False)
+        # 	ax7.set_yticks([])
+        # 	ax7.set_xticks([])
+        # 	KWTable = ax7.table(cellText=dfKruskal.values,rowLabels=dfKruskal.index,cellLoc='center',rowLoc='center',loc='center right',colWidths=(.5,.5))
+        # 	KWTable.set_fontsize(6)
+        # 	ax7.set_title('P-values for Kruskal-Wallis',size=8)
+        sns.despine()
+        plt.savefig(pp, format='pdf')
         
-        # Nucleotides
-        ax3 = plt.subplot(gs[2])
-        ax3.plot(fillX,pdA.mean(axis=0),linewidth=1, color='#810f7c',label='A') # purple
-        ax3.plot(fillX,pdT.mean(axis=0),linewidth=1, color='#006d2c',label='T') # green
-        ax3.plot(fillX,pdG.mean(axis=0),linewidth=1, color='#0868ac',label='G') # blue
-        ax3.plot(fillX,pdC.mean(axis=0),linewidth=1, color='#b30000',label='C') # red
-        ax3.axvline(x=195,linewidth=5,color='#ae017e',alpha=0.3)
-        ax3.axvline(x=395,linewidth=5,color='#ae017e',alpha=0.3) # not sure how to set the size to that of the sliding window
-        ax3.axvline(x=195,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax3.axvline(x=395,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax3.set_xticks([])
-        ax3.set_yticks([10,25,40])
-        ax3.set_title('Mean Nucleotide Content Separately',size=10)
-        #ax3.legend(loc=0,fontsize=5)
+        gs = gridspec.GridSpec(4,3,height_ratios=[1,1,1,1])
+        gs.update(hspace=.45)
+        # Plot mean AT
+        ax5 = plt.subplot(gs[0,:])
+        ax5.plot(fillX,pdWindow.mean(axis=0),linewidth=1, color='#3e1638')
+        ax5.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax5.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax5.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax5.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax5.hlines(y=63,xmin=20,xmax=31,linewidth=.5,color='#081d58',zorder=0)
+        ax5.text(32,63,'11bp sliding window',size=6)
+        ax5.set_xticks([])
+        ax5.set_yticks([55,60,65])
+        ax5.set_ylabel('% AT Content',size=8)
+        ax5.set_title('Mean AT Content',size=8)
+        f = splrep(fillX,pdWindow.mean(axis=0),k=5,s=11)
+        smoothMean = splev(fillX,f)
+        firstDer = splev(fillX,f,der=1)
+        firstDer[0:halfwindow] = 0 # small edge effect
+        firstDer[-halfwindow:] = 0 # small edge effect
+        secondDer = splev(fillX,f,der=2)
+        secondDer[0:window] = 0 # small edge effect
+        secondDer[-window:] = 0 # small edge effect
+        # Plot smoothed mean AT
+        ax6 = plt.subplot(gs[1,:])
+        ax6.plot(fillX,smoothMean,linewidth=1, color='#3e1638',alpha=0.9)
+        ax6.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax6.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax6.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax6.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax6.set_xticks([])
+        ax6.set_yticks([55,60,65])
+        ax6.set_ylabel('% AT Content',size=8)
+        ax6.set_title('Fitted Mean AT Content',size=8)
+        # Plot the 1st derivative
+        ax7 = plt.subplot(gs[2,:])
+        ax7.plot(fillX,firstDer,linewidth=1, color='#3e1638',alpha=0.8) # mean.diff(), np.gradient(mean), numpy.diff(y) / numpy.diff(x)
+        ax7.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax7.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax7.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax7.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax7.axhline(y=0,linewidth=.1,color='#bd4973',alpha=0.3)
+        ax7.set_xticks([])
+        ax7.set_yticks([-1,0,1])
+        ax7.set_ylabel('Amplitude',size=8)
+        ax7.set_title('First Derivative of Fitted Mean',size=8)
+        # 	ax3 = plt.subplot(gs[2])
+        # 	smooth_width = 59
+        # 	x5 = np.linspace(-3,3,smooth_width)
+        # 	y5 = (4*x5**2-2)*np.exp(-x5**2)/smooth_width*8
+        # 	for index, row in pdWindow.iterrows():
+        # 		y5_conv = np.convolve(row,y5,mode='same')
+        # 		y5_conv[0:30] = np.nan
+        # 		y5_conv[559:] = np.nan
+        # 		ax3.plot(fillX,y5_conv,linewidth=.15,color= '#3e1638', alpha=0.15)
+        # 	#ax3.plot(fillX,y5_conv,linewidth=1, color='#253494',alpha=0.5)
+        # 	ax3.axvline(x=195,linewidth=5,color='#bd4973',alpha=0.3)
+        # 	ax3.axvline(x=395,linewidth=5,color='#bd4973',alpha=0.3)
+        # 	ax3.axvline(x=245,linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax3.axvline(x=345,linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax3.axvline(x=195,linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax3.axvline(x=395,linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax3.axhline(y=0,linewidth=.1,color='#bd4973',alpha=0.3)
+        # 	ax3.set_yticks([-12,0,12])
+        # 	ax3.set_title('Smoothed Second Derivative for each UCE',size=8)
+        # 	ax3.set_xlabel('Base Pairs',size=10)
         
-        # Plot the median and quantiles
-        # 	ax3.plot(fillX,pdWindow.median(axis=0),linewidth=1, color='#081d58')
-        # 	ax3.fill_between(fillX,pdWindow.min(axis=0),pdWindow.max(axis=0),facecolor='#edf8b1', label='')
-        # 	ax3.fill_between(fillX,pdWindow.quantile(axis=0,q=.05),pdWindow.quantile(axis=0,q=0.95),facecolor = '#c7e9b4',label='')
-        # 	ax3.fill_between(fillX,pdWindow.quantile(axis=0,q=0.25),pdWindow.quantile(axis=0,q=0.75),facecolor = '#7fcdbb',label='')
-        # 	ax3.axvline(x=195,linewidth=5,color='#ae017e',alpha=0.5)
-        # 	ax3.axvline(x=395,linewidth=5,color='#ae017e',alpha=0.5)
-        
-        # Plot the derivative
-        ax4 = plt.subplot(gs[3])
-        #ax3.updatae(hspace=1)
-        ax4.plot(fillX,pdWindow.mean(axis=0).diff(periods=11),linewidth=1, color='#081d58')
-        ax4.axvline(x=195,linewidth=5,color='#ae017e',alpha=0.3)
-        ax4.axvline(x=395,linewidth=5,color='#ae017e',alpha=0.3)
-        ax4.axvline(x=195,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax4.axvline(x=395,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax4.set_xticks([])
-        ax4.set_yticks([-10,0,10])
-        ax4.set_title('AT Content Rate of Change',size=10)
-        
-        # Plot the second derivative
-        # Convolution kernel equal to second derivative
+        # Plot the 2nd derivative
+        ax8 = plt.subplot(gs[3,:])
+        ax8.plot(fillX,secondDer,linewidth=1, color='#3e1638',alpha=0.7)
         #http://stackoverflow.com/questions/13691775/python-pinpointing-the-linear-part-of-a-slope
-        #http://stackoverflow.com/questions/9300430/algorithm-is-there-a-linear-trend-in-data?rq=1
-        smooth = 50
-        x1 = np.linspace(-3,3,smooth)
-        y1 = (4*x1**2-2) * np.exp(-x1**2) / smooth * 8
-        mean = pdWindow.mean(axis=0)
-        y_conv = np.convolve(mean,y1,mode="same")
-        ax5 = plt.subplot(gs[4])
-        #ax4.update(hspace=1)
-        ax5.plot(fillX,y_conv,linewidth=1, color='#081d58')
-        ax5.set_ylim(-11,11)
-        ax5.axvline(x=195,linewidth=5,color='#ae017e',alpha=0.3)
-        ax5.axvline(x=395,linewidth=5,color='#ae017e',alpha=0.3)
-        ax5.axvline(x=195,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax5.axvline(x=395,linewidth=.5,linestyle='dashed',color='#ae017e')
-        ax5.set_yticks([-14,0,14])
-        ax5.set_title('AT Content Second Derivative',size=10)
-        ax5.set_xlabel('Base Pairs',size=14)
-        # this is off for some reason????
+        ax8.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax8.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax8.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax8.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax8.axhline(y=0,linewidth=.1,color='#bd4973',alpha=0.3)
+        ax8.set_ylabel('Amplitude',size=8)
+        ax8.set_xlabel('Position',size=6)
+        ax8.set_yticks([-.5,0,.5])
+        ax8.set_title('Second Derivative of Fitted Mean',size=8)
+        sns.despine()
+        plt.xlim(0,num)
+        pp.savefig()
         
-        sns.despine(offset=3)
-        plt.xlim(0,589)
-        plt.savefig('Fangs_{0}.pdf'.format(fileName), format='pdf', bbox_inches='tight')
-        plt.clf()
-
-def dirLine(rangeFeatures,fileName):
-    #posStr = (rangeFeatures[(rangeFeatures['compareFive'] == "+") & (rangeFeatures['compareTen'] == "+") & (rangeFeatures['compareTwenty'] == "+") & (rangeFeatures['compareThirty'] == "+") & (rangeFeatures['compareFourty'] == "+")])
-    posStr = (rangeFeatures[(rangeFeatures['compareThirty'] == "+")])
-        # 	posStr = (rangeFeatures[(rangeFeatures['compareTen'] == "+") &
-        # 	(rangeFeatures['compareTwenty'] == "+") &
-        # 	(rangeFeatures['compareThirty'] == "+")])
-        outPos = []
-        for element in posStr['combineString']:
-            posFeature = slidingWindow(element)
-                outPos.append(posFeature)
-        posWindow = pd.DataFrame(outPos)
-        endLinegraphs(posWindow,'Pos_30_{0}'.format(fileName))
+        (((num-uce)/2)+(inuce-halfwindow))# 245
+        (((num-uce)/2)+(uce-inuce-halfwindow)) # 345
+        (((num-uce)/2)-halfwindow) # 195
+        (((num-uce)/2)+uce-halfwindow)# 395
         
-        #negStr = (rangeFeatures[(rangeFeatures['compareFive'] == "-") & (rangeFeatures['compareTen'] == "-") & (rangeFeatures['compareTwenty'] == "-") & (rangeFeatures['compareThirty'] == "-") & (rangeFeatures['compareFourty'] == "-")])
-        negStr = (rangeFeatures[(rangeFeatures['compareThirty'] == "-")])
-        # 	negStr = (rangeFeatures[(rangeFeatures['compareTen'] == "-") &
-        # 	(rangeFeatures['compareTwenty'] == "-") &
-        # 	(rangeFeatures['compareThirty'] == "-")])
-        outNeg = []
-        #negStr = (rangeFeatures[rangeFeatures['compareFive'] == '-'])
-        for element in negStr['combineString']:
-            negFeature = slidingWindow(element)
-                outNeg.append(negFeature)
-        negWindow = pd.DataFrame(outNeg)
-        endLinegraphs(negWindow,'Neg_30_{0}'.format(fileName))
-
-#equStr = (rangeFeatures[(rangeFeatures['compareFive'] == "+") & (rangeFeatures['compareTen'] == "+") & (rangeFeatures['compareTwenty'] == "+") & (rangeFeatures['compareThirty'] == "+") & (rangeFeatures['compareFourty'] == "+") | (rangeFeatures['compareFive'] == "-") & (rangeFeatures['compareTen'] == "-") & (rangeFeatures['compareTwenty'] == "-") & (rangeFeatures['compareThirty'] == "-") & (rangeFeatures['compareFourty'] == "-")])
-# 	dupStr = (rangeFeatures[((rangeFeatures['compareTen'] == "+") &
-# 	(rangeFeatures['compareTwenty'] == "+") &
-# 	(rangeFeatures['compareThirty'] == "+")) |
-# 	((rangeFeatures['compareTen'] == "-") &
-# 	(rangeFeatures['compareTwenty'] == "-") &
-# 	(rangeFeatures['compareThirty'] == "-"))])
-dupStr = (rangeFeatures[(rangeFeatures['compareThirty'] == "+") | (rangeFeatures['compareThirty'] == "-")])
-    outDup = []
-        #equStr = (rangeFeatures[rangeFeatures['compareFive'] == '='])
-        for element in dupStr['combineString']:
-            dupFeature = slidingWindow(element)
-                outDup.append(dupFeature)
-        dupWindow = pd.DataFrame(outDup)
-        endLinegraphs(dupWindow,'reComb_30_{0}'.format(fileName))
+        gs = gridspec.GridSpec(3,3,height_ratios=[2,1,1])
+        gs.update(hspace=.65)
+        ax9 = plt.subplot(gs[0,:])
+        f1, t1, Zxx1 = ssignal.stft(firstDer,fs=1.0, window='hann',nperseg=30,noverlap=None)#,nperseg=11,noverlap=5
+        ax9.pcolormesh(t1,f1,np.abs(Zxx1),cmap='RdPu')
+        ax9.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax9.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax9.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax9.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax9.set_ylabel('Frequency',size=8)
+        ax9.set_xlabel('Position',size=6)
+        ax9.set_yticks([0,.25,.5])
+        ax9.set_title('Short Fourier Transform',size=8)#30 bp bins
+        ax10 = plt.subplot(gs[1,:])
+        ax10.plot(fillX,firstDer,linewidth=1, color='#3e1638')
+        ax10.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax10.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax10.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax10.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax10.axvspan((((num-uce)/2)+(inuce-halfwindow)),(((num-uce)/2)+(uce-inuce-halfwindow)),facecolor = '#ae3e9e',label='',alpha=0.1) # 245, 345
+        ax10.axvspan(inuce,(((num-uce)/2)-inuce),facecolor = '#863eae',label='',alpha=0.1) # 50, 150
+        ax10.axvspan(460,560,facecolor = '#ae3e66',label='',alpha=0.1)
+        ax10.set_yticks([-.5,0,.5])
+        ax10.set_xlabel('Position',size=6)
+        ax10.set_ylabel('Amplitude',size=8)
+        ax10.set_title('First Derivative of Fitted Mean',size=8)
+        plt.xlim(0,num)
+        #https://docs.scipy.org/doc/scipy-0.19.0/reference/generated/scipy.signal.stft.html
+        Fs = 1.0 # sampling rate
+        Ts = 1.0/Fs # sampling interval
+        y2sd = firstDer[(((num-uce)/2)+(inuce-halfwindow)):(((num-uce)/2)+(uce-inuce-halfwindow))] # 245, 345
+        n2sd = len(y2sd) # length of the signal
+        k2sd = np.arange(n2sd)
+        T2sd = n2sd/Fs
+        frq2sd = k2sd/T2sd # two sides frequency range
+        frq2sd = frq2sd[range(n2sd/2)] # one side frequncy range
+        Y2sd = np.fft.fft(y2sd)/n2sd # fft computing and normalization
+        Y2sd = Y2sd[range(n2sd/2)]
+        y3sd = firstDer[inuce:(((num-uce)/2)-inuce)] # 50, 150
+        n3sd = len(y3sd)
+        k3sd = np.arange(n3sd)
+        T3sd = n3sd/Fs
+        frq3sd = k3sd/T3sd
+        frq3sd = frq3sd[range(n3sd/2)]
+        Y3sd = np.fft.fft(y3sd)/n3sd
+        Y3sd = Y3sd[range(n3sd/2)]
+        y4sd = firstDer[460:560] # [-window:]
+        n4sd = len(y4sd)
+        k4sd = np.arange(n4sd)
+        T4sd = n4sd/Fs
+        frq4sd = k4sd/T4sd
+        frq4sd = frq4sd[range(n4sd/2)]
+        Y4sd = np.fft.fft(y4sd)/n4sd
+        Y4sd = Y4sd[range(n4sd/2)]
+        # 	FFT for sections of the smoothed second derivative
+        ax11 = plt.subplot(gs[2,0])
+        ax11.plot(frq3sd,abs(Y3sd),linewidth=1, color='#863eae')
+        ax11.set_ylabel('|Y(freq)|',size=8)
+        ax11.set_xlabel('Freq(Hz)',size=6)#AT Rate Change
+        ax12 = plt.subplot(gs[2,1],sharey=ax11)
+        plt.setp(ax12.get_yticklabels(), visible=False)
+        ax12.plot(frq2sd,abs(Y2sd),linewidth=1, color='#ae3e9e')
+        ax12.set_title('Power Series for Highlighted Regions',size=8)# Power Spectrum Analysis for FFT
+        ax12.set_xlabel('Freq(Hz)',size=6)
+        ax13 = plt.subplot(gs[2,2],sharey=ax11)
+        plt.setp(ax13.get_yticklabels(), visible=False)
+        ax13.plot(frq4sd,abs(Y4sd),linewidth=1, color='#ae3e66')
+        ax13.set_xlabel('Freq(Hz)',size=6)
+        sns.despine()
+        pp.savefig()
         
-        equStr = (rangeFeatures[(rangeFeatures['compareThirty'] == "=")])
-        # 	(rangeFeatures['compareTwenty'] == "=") &
-        # 	(rangeFeatures['compareThirty'] == "=")])
-        outEqu = []
-        for element in equStr['combineString']:
-            equFeature = slidingWindow(element)
-                outEqu.append(equFeature)
-        equWindow = pd.DataFrame(outEqu)
-                    endLinegraphs(equWindow,'Equ_30_{0}'.format(fileName)) # ,outA,outT
+        gs = gridspec.GridSpec(2,1,height_ratios=[1,3])
+        gs.update(hspace=.45)
+        # Nucleotides
+        ax14 = plt.subplot(gs[0])
+        ax14.plot(fillX,pdA.mean(axis=0),linewidth=1, color='#3f1bd7',label='A')
+        ax14.plot(fillX,pdT.mean(axis=0),linewidth=1, color='#d7401b',label='T')
+        ax14.plot(fillX,pdG.mean(axis=0),linewidth=1, color='#d73f1b',label='G')
+        ax14.plot(fillX,pdC.mean(axis=0),linewidth=1, color='#9d1bd7',label='C')
+        ax14.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax14.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax14.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax14.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax14.set_yticks([10,25,40])
+        ax14.set_ylabel('% Nucleotide Content',size=8)
+        ax14.set_xlabel('Position',size=6)
+        ax14.set_title('Mean Nucleotide Content Separately',size=8)
+        ax14.legend(loc=0,fontsize=5,labelspacing=0.05)
+        # Plot the CpG
+        # Might still want to return the actual CpG location for how many are methylated
+        ax15 = plt.subplot(gs[1])
+        meanCpG = pdCpG.mean(axis=0)
+        ax15.plot(fillX,meanCpG,linewidth=1, color='#d71b54',label='CpG mean',alpha=0.7) # orange
+        ax15.fill_between(fillX,pdCpG.mean(axis=0)+pdCpG.std(axis=0,ddof=1),pdCpG.mean(axis=0)-pdCpG.std(axis=0,ddof=1),facecolor = '#d71b54',label='',alpha=0.2)
+        ax15.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax15.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax15.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax15.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax15.set_title('Mean CpG',size=8)
+        ax15.set_ylabel('% CpG Content',size=8)
+        ax15.set_xlabel('Position',size=6)
+        ax15.set_yticks([-4,2,8])
+        plt.xlim(0,num)
+        sns.despine()
+        pp.savefig()
+        
+        gs = gridspec.GridSpec(2,1,height_ratios=[1,1])
+        gs.update(hspace=.5)
+        pdMethPer = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('Percentage',case=False)]])
+        pdMethNum = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('Frequency',case=False)]])
+        # Make heatmap for % methylation (Percentage)
+        ax16 = plt.subplot(gs[0,:])
+        ax16.pcolormesh(pdMethPer.T,cmap='RdPu')#.T for transpose 'PuOr'
+        ax16.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax16.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax16.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax16.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax16.set_ylabel('% Methylation per Sample',size=8)
+        ax16.set_xlabel('Position',size=6)
+        ax16.set_yticklabels(pdMethPer.columns.str.replace('.bed_Percentage',''))
+        ax16.set_title('Methylation Percentage',size=8)
+        # Make heatmap for # methylation (Frequency)
+        ax17 = plt.subplot(gs[1,:])
+        ax17.pcolormesh(pdMethNum.T,cmap='RdPu')#.T for transpose 'PuOr'
+        ax17.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax17.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax17.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax17.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax17.set_ylabel('Frequency of Methylation per Sample',size=8)
+        ax17.set_xlabel('Position',size=6)
+        ax17.set_yticklabels(pdMethNum.columns.str.replace('.bed_Frequency',''))
+        ax17.set_title('Methylation Frequency',size=8)
+        plt.xlim(0,num)
+        #http://stackoverflow.com/questions/28615887/how-to-move-a-ticks-label-in-matplotlib # shift labels
+        #https://matplotlib.org/examples/images_contours_and_fields/pcolormesh_levels.html # set colorbar
+        #plt.colorbar()
+        # Make heatmap for % methlation of cpg
+        sns.despine()
+        pp.savefig()
+        pp.close()
 
-# 9 - save file from panda
+# get the reverse complement
+def reverseComplement(sequence):
+    seqDict = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
+        return "".join([seqDict[base] for base in reversed(sequence)])
+
+# separate by directionality
+def dirLine(rangeFeatures,fileName,mFiles,num,uce,inuce,window):
+    DirList = ["+","-","="]
+        for direction in DirList:
+            dirStr = (rangeFeatures[(rangeFeatures['compareThirty'] == direction)])
+                #savePanda(dirStr[['chr','start','end','type']], '{0}_30_coordinates_{1}.bed'.format(direction,fileName)) # prints the bed file for each directionality
+                dirWindow, dirWinCpG, dirWinA, dirWinT, dirWinG, dirWinC, dirWinMo = dataframeWindow(dirStr,num,uce,inuce,window)
+                pddirMeth = methPositions(mFiles,dirStr,num,uce,inuce)
+                endLinegraphs(pddirMeth,dirWindow,dirWinCpG,dirWinA,dirWinT,dirWinG,dirWinC,dirWinMo,'{0}_30_{1}'.format(direction,fileName),num,uce,inuce,window)
+        # More drawn out performance of sliding window and methylation collection in order to collect reverse complement super imposed
+        negStr = (rangeFeatures[(rangeFeatures['compareThirty'] == '-')])
+        outComp = []
+        outCpG = []
+        compA = []
+        compT = []
+        compG = []
+        compC = []
+        compMo = []
+        outnegMeth = []
+        for element in negStr['reverseComplement']:
+            negFeature, negCpGfeature,negAfeature,negTfeature,negGfeature,negCfeature,negMofeature = slidingWindow(element,num,uce,inuce,window)
+                outComp.append(negFeature)
+                outCpG.append(negCpGfeature)
+                compA.append(negAfeature)
+                compT.append(negTfeature)
+                compG.append(negGfeature)
+                compC.append(negCfeature)
+                compMo.append(negMofeature)
+        for methName in mFiles:
+            methFeatures = eachFileProcess(methName)
+                methPosition = methIntersect(negStr,methFeatures,num,uce,inuce)
+                methFreq = methylationFreq(methPosition,num)
+                methFreq.columns = ['{0}_Percentage'.format(methName),'{0}_Frequency'.format(methName)]
+                outnegMeth.append(methFreq)
+posStr = (rangeFeatures[(rangeFeatures['compareThirty'] == '+')])
+    for element in posStr['combineString']:
+        posFeature, posCpGfeature,posAfeature, posTfeature, posGfeature, posCfeature,posMofeature = slidingWindow(element,num,uce,inuce,window)
+            outComp.append(posFeature)
+                outCpG.append(posCpGfeature)
+                compA.append(posAfeature)
+                compT.append(posTfeature)
+                compG.append(posGfeature)
+                compC.append(posCfeature)
+                compMo.append(posMofeature)
+        compWindow = pd.DataFrame(outComp)
+        compWinCpG = pd.DataFrame(outCpG)
+        compWinA = pd.DataFrame(compA)
+        compWinT = pd.DataFrame(compT)
+        compWinG = pd.DataFrame(compG)
+        compWinC = pd.DataFrame(compC)
+        compWinMo = pd.DataFrame(compMo)
+        pdposMeth = methPositions(mFiles,posStr,num,uce,inuce)
+        pdnegMeth = pd.concat(outnegMeth,axis=1)
+        pdnegInMeth = pdnegMeth.iloc[::-1] # reverse order 
+        pdnegInsetMeth = pdnegInMeth.reset_index(drop=True) # make new index, don't make old one into column
+        pdcompMeth = pd.concat([pdnegInsetMeth,pdposMeth],axis=1)
+        pdcompMeth = pdcompMeth.groupby(pdcompMeth.columns, axis=1).sum()
+    endLinegraphs(pdcompMeth,compWindow,compWinCpG,compWinA,compWinT,compWinG,compWinC,compWinMo,'revComp_30_{0}'.format(fileName),num,uce,inuce,window)
+
+# save file from panda
 def savePanda(pdData, strFilename):
     pdData.to_csv(strFilename, sep='\t', header=False, index=False)
 
-# 9 - out put directionality, as inferred by comparing first and last n base pairs
+# out put directionality, as inferred by comparing first and last n base pairs
 def compareN(element,size):
     start = element[:size]
         end = element[-size:]
         perSize = []
         perSize.append(eval('100*int(start.count("A") + start.count("a") + start.count("T") + start.count("t"))/len(start)'))
         perSize.append(eval('100*int(end.count("A") + end.count("a") + end.count("T") + end.count("t"))/len(end)'))
-        #outList.append(size) # uncomment if want the size of the end in the dataframe
-        #outList.append(perSize) # uncomment if want the values compared in the dataframe
         if perSize[0] > perSize[1]: outList = '+'
         if perSize[1] > perSize[0]: outList = '-'
         if perSize[1] == perSize[0]: outList = '='
         return outList
 
+# with the results from compareN per each element, evaluate directionality into new column
+def evalN(rangeFeatures,fileName):
+    rangeFeatures['compareFive'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],5)),axis=1)
+        rangeFeatures['compareFive'] = rangeFeatures['compareFive'].astype(str)
+        rangeFeatures['compareTen'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],10)),axis=1)
+        rangeFeatures['compareTwenty'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],20)),axis=1)
+        rangeFeatures['compareThirty'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],30)),axis=1)
+        rangeFeatures['compareFourty'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],40)),axis=1)
+        compareEnds = pd.DataFrame(rangeFeatures[['chr','start','end','compareFive','compareTen','compareTwenty','compareThirty','compareFourty']])
+        return rangeFeatures
+
+# do all the analysis/plots for each type
+def perType(rangeFeatures,fileName,mFiles,num,uce,inuce,window):
+    typeList = ['intronic','intergenic','exonic']
+        for type in typeList:
+            boolType = (rangeFeatures[rangeFeatures['type'] == type])
+                pdWindow, pdTypeCpG, pdTypeA, pdTypeT, pdTypeG, pdTypeC, pdTypeMo = dataframeWindow(boolType,num,uce,inuce,window)
+                pdMeth = methPositions(mFiles,boolType,num,uce,inuce)
+                endLinegraphs(pdMeth,pdWindow,pdTypeCpG,pdTypeA,pdTypeT,pdTypeG,pdTypeC,pdTypeMo,'{0}_{1}'.format(type,fileName),num,uce,inuce,window)
+                dirLine(boolType,'{0}_{1}'.format(type,fileName))
+
 def main():
-    
     # Collect arguments
-    args = get_args()
-        aFiles = [line.strip() for line in args.file]
+    num = 600 # total size of region to look at (region + flanks)
+        uce = 200 # size of your element (region without flanks)
+        inuce = 50 # size into your element
+        window = 11 # size of sliding window, odd number!!
+        args = get_args()
+        eFiles = [line.strip() for line in args.efile]
+        mFiles = [line.strip() for line in args.mfile]
         sizeGenome = args.genome
         faGenome = args.fasta
-        
-        # Collect and processes files
-        for fileName in aFiles:
+        #snpFeature = eachFileProcess(args.snp)
+        for fileName in eFiles:
             btFeatures = eachFileProcess(fileName)
-                rangeFeatures = getRange(btFeatures, fileName)
-                saveAll, saveExonic, saveIntronic, saveIntergenic = getFasta(btFeatures,faGenome,fileName)
-                rangeFeatures = btRange(rangeFeatures,faGenome)
-                outWindow = []
-                outA = []
-                outT = []
-                outG = []
-                outC = []
-                for element in rangeFeatures['combineString']:
-                    outFeature, winA, winT, winG, winC = slidingWindow(element)
-                        outWindow.append(outFeature)
-                        outA.append(winA)
-                        outT.append(winT)
-                        outG.append(winG)
-                        outC.append(winC)
-                pdWindow = pd.DataFrame(outWindow)
-                pdA = pd.DataFrame(outA)
-                pdT = pd.DataFrame(outT)
-                pdG = pd.DataFrame(outG)
-                pdC = pd.DataFrame(outC)
-                endLinegraphs(pdWindow,pdA,pdT,pdG,pdC,fileName)
-                
-                rangeFeatures['compareFive'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],5)),axis=1)
-                rangeFeatures['compareFive'] = rangeFeatures['compareFive'].astype(str)
-                rangeFeatures['compareTen'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],10)),axis=1)
-                rangeFeatures['compareTwenty'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],20)),axis=1)
-                rangeFeatures['compareThirty'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],30)),axis=1)
-                rangeFeatures['compareFourty'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],40)),axis=1)
-                compareEnds = pd.DataFrame(rangeFeatures[['chr','start','end','compareFive','compareTen','compareTwenty','compareThirty','compareFourty']])
-            savePanda(compareEnds,'Directionality_results_for_all_{0}.txt'.format(fileName))
-
-#dirLine(rangeFeatures,fileName)
-
-# 		typeList = ['exonic','intronic','intergenic']
-# 		for type in typeList:
-# 			boolType = (rangeFeatures[rangeFeatures['type'] == type])
-# 			outType = []
-# 			for element in boolType['combineString']:
-# 				outFeature = slidingWindow(element)
-# 				outType.append(outFeature)
-# 			pdWindow = pd.DataFrame(outType)
-# 			endLinegraphs(pdWindow,pdA,pdT,'{0}_{1}'.format(type,fileName))
-#dirLine(rangeFeatures,'{0}_{1}'.format(type,fileName))
-
+                subsetFeatures = getRange(btFeatures, fileName,num,uce,inuce)
+                #saveAll, saveExonic, saveIntronic, saveIntergenic = getFasta(btFeatures,faGenome,fileName)
+                rangeFeatures = btRange(subsetFeatures,faGenome)
+                pdWindow, pdCpG, pdA, pdT, pdG, pdC, pdMo = dataframeWindow(rangeFeatures,num,uce,inuce,window)
+                pdMeth = methPositions(mFiles,rangeFeatures,num,uce,inuce)
+                endLinegraphs(pdMeth,pdWindow,pdCpG,pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,inuce,window)
+# 		directionFeatures = evalN(rangeFeatures,fileName)
+# 		dirLine(directionFeatures,fileName,mFiles,num,uce,inuce,window)
+# 		perType(directionFeatures,fileName,mFiles,num,uce,inuce,window)
 
 if __name__ == "__main__":
     main()
