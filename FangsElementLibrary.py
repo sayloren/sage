@@ -4,6 +4,7 @@ import argparse
 import Bio
 from Bio import SeqIO
 from Bio import Seq
+import itertools
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -96,27 +97,39 @@ def methThreshold(methFeatures,methThresh):
 # Intersect the methylation file with the elements
 def methIntersect(rangeFeatures,methFeature,num,uce,inuce):
     methSBoundary = methFeature.intersect(rangeFeatures[['chr','sBoundary','sEdge','id']].values.tolist(),wb=True,wa=True)
-        pdmethSBoundary = bedtoolToPanda(methSBoundary)
-        pdmethSBoundary['intAdd'] =  0
-        pdmethSBoundary.columns = ['mchr','mstart','mstop','methCov','methPer','chr','sBoundary','sEdge','id','intAdd']
-        pdmethSBoundary['methLoc'] = pdmethSBoundary['sEdge'].astype(int)-pdmethSBoundary['mstop'].astype(int)+pdmethSBoundary['intAdd'].astype(int) # or just count?
-        outpdmethSBoundary = pdmethSBoundary[['id','methPer','methLoc','methCov']]
+        if len(methSBoundary) != 0:
+            pdmethSBoundary = bedtoolToPanda(methSBoundary)
+                pdmethSBoundary['intAdd'] =  0
+                pdmethSBoundary.columns = ['mchr','mstart','mstop','methCov','methPer','chr','sBoundary','sEdge','id','intAdd']
+                pdmethSBoundary['methLoc'] = pdmethSBoundary['sEdge'].astype(int)-pdmethSBoundary['mstop'].astype(int)+pdmethSBoundary['intAdd'].astype(int) # or just count?
+                outpdmethSBoundary = pdmethSBoundary[['id','methPer','methLoc','methCov']]
+        else:
+            outpdmethSBoundary = None
+        
         methMiddle = methFeature.intersect(rangeFeatures[['chr','sCenter','eCenter','id']].values.tolist(),wb=True,wa=True)
-        pdmethFeature = bedtoolToPanda(methMiddle)
-        pdmethFeature['intAdd'] = (((num - uce)/2) + inuce)
-        pdmethFeature.columns = ['mchr','mstart','mstop','methCov','methPer','chr','sCenter','eCenter','id','intAdd']
-        pdmethFeature['methLoc'] = pdmethFeature['eCenter'].astype(int)-pdmethFeature['mstop'].astype(int)+pdmethFeature['intAdd'].astype(int) # or just count?
-        outpdmethFeature = pdmethFeature[['id','methPer','methLoc','methCov']]
-        methEBoundary = methFeature.intersect(rangeFeatures[['chr','eEdge','eBoundary','id']].values.tolist(),wb=True,wa=True)
-        pdmethEBoundary = bedtoolToPanda(methEBoundary)
-        pdmethEBoundary['intAdd'] = (((num - uce)/2) + (uce - inuce))
-        pdmethEBoundary.columns = ['mchr','mstart','mstop','methCov','methPer','chr','eEdge','eBoundary','id','intAdd']#,'methDir'
-        pdmethEBoundary['methLoc'] = pdmethEBoundary['eBoundary'].astype(int)-pdmethEBoundary['mstop'].astype(int)+pdmethEBoundary['intAdd'].astype(int) # or just count?
-        outpdmethEBoundary = pdmethEBoundary[['id','methPer','methLoc','methCov']]
-        methList = [outpdmethSBoundary,outpdmethFeature,outpdmethEBoundary]
-        concatMeth = pd.concat(methList)
-        sortMeth = concatMeth.sort_values(['methLoc'],ascending=True)
-        return sortMeth
+        if len(methMiddle) != 0:
+            pdmethFeature = bedtoolToPanda(methMiddle)
+                pdmethFeature['intAdd'] = (((num - uce)/2) + inuce)
+                pdmethFeature.columns = ['mchr','mstart','mstop','methCov','methPer','chr','sCenter','eCenter','id','intAdd']
+                pdmethFeature['methLoc'] = pdmethFeature['eCenter'].astype(int)-pdmethFeature['mstop'].astype(int)+pdmethFeature['intAdd'].astype(int) # or just count?
+                outpdmethFeature = pdmethFeature[['id','methPer','methLoc','methCov']]
+                    else:
+                        outpdmethFeature = None
+                            
+                            methEBoundary = methFeature.intersect(rangeFeatures[['chr','eEdge','eBoundary','id']].values.tolist(),wb=True,wa=True)
+                                if len(methEBoundary) != 0:
+                                    pdmethEBoundary = bedtoolToPanda(methEBoundary)
+                                        pdmethEBoundary['intAdd'] = (((num - uce)/2) + (uce - inuce))
+                                            pdmethEBoundary.columns = ['mchr','mstart','mstop','methCov','methPer','chr','eEdge','eBoundary','id','intAdd']#,'methDir'
+                                                pdmethEBoundary['methLoc'] = pdmethEBoundary['eBoundary'].astype(int)-pdmethEBoundary['mstop'].astype(int)+pdmethEBoundary['intAdd'].astype(int) # or just count?
+                                                    outpdmethEBoundary = pdmethEBoundary[['id','methPer','methLoc','methCov']]
+                                                        else:
+                                                            outpdmethEBoundary = None
+                                                                
+                                                                methList = [outpdmethSBoundary,outpdmethFeature,outpdmethEBoundary]
+                                                                    concatMeth = pd.concat(methList)
+                                                                        sortMeth = concatMeth.sort_values(['methLoc'],ascending=True)
+                                                                            return sortMeth
 
 # collect methylation frequencies by position of elements
 def methylationFreq(methPosition,num): # concatMeth from methIntersect
@@ -135,13 +148,17 @@ def methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh):
         for methName in mFiles:
             methFeatures = eachFileProcess(methName)
                 pdmethThresh = methThreshold(methFeatures,methThresh)
-                methPosition= methIntersect(rangeFeatures,pdmethThresh,num,uce,inuce)
-                #groupCat = methMatch(methPosition,rangeFeatures,num) #integrate with revComp, ect
+                methPosition = methIntersect(rangeFeatures,pdmethThresh,num,uce,inuce)
+                methCpGPos, methCpGNeg = methMatch(methPosition,rangeFeatures,num) #integrate with revComp, ect
+                methCpGPos.columns = ['{0}_CpGMethylationPos'.format(methName),'{0}_unMethylatedCpGPos'.format(methName),'{0}_MethylationWOCpGPos'.format(methName)]
+                methCpGNeg.columns = ['{0}_CpGMethylationNeg'.format(methName),'{0}_unMethylatedCpGNeg'.format(methName),'{0}_MethylationWOCpGNeg'.format(methName)]
                 pdmethFreq = methylationFreq(methPosition,num)
                 pdmethFreq.columns = ['{0}_Percentage'.format(methName),'{0}_Coverage'.format(methName),'{0}_Frequency'.format(methName)]
-                outMeth.append(pdmethFreq)
+                frames = [pdmethFreq,methCpGPos,methCpGNeg]
+                pdMethEx = pd.concat(frames,axis=1)
+                outMeth.append(pdMethEx)
         pdMeth = pd.concat(outMeth,axis=1)
-    return pdMeth#, groupCat
+    return pdMeth
 
 # get fasta strings for each desired region
 def getFasta(btFeatures,faGenome,fileName):
@@ -213,48 +230,78 @@ def slidingWindow(element,num,uce,inuce,window):
 
 # collect methylation locations by id
 def methID(sortMeth):
-    # 	#if want to collect by id, for use of cpg population http://stackoverflow.com/questions/10373660/converting-a-pandas-groupby-object-to-dataframe
-    # 	# but may need to incorporate the other data, (coverage and %) in some way?
+    # but may need to incorporate the other data, (coverage and %) in some way?
     groupMeth = sortMeth.groupby(['id'])['methLoc'].apply(list).to_frame(name = 'groupMeth').reset_index()
         return groupMeth
 
 # return locations of cpgs attached to the id they came from
-def cpgWindow(rangeFeatures,num):
+def cpgWindow(rangeFeatures,num,stFeature):
     stringDF = rangeFeatures[['id','combineString']]
         out = []
         for element, id in zip(stringDF['combineString'],stringDF['id']):
             index = 0
                 while index < len(element): # or num
-                    index = element.find('CG',index)
+                    index = element.find(stFeature,index)# or 'GC'
                         if index == -1:
                             break
                         outtemp = []
                         outtemp.append(id)
+                        #outtemp.append(index-1)
                         outtemp.append(index)
-                        index += 2 # because CG is size 2
+                        #outtemp.append(index+1)
+                        index += len(stFeature) # or 1
                     out.append(outtemp)
-        pdout = pd.DataFrame(out)
+    pdout = pd.DataFrame(out)
+        print pdout
         pdout.columns = ['id','cpg']
         groupCpG = pdout.groupby(['id'])['cpg'].apply(list).to_frame(name = 'groupCpG').reset_index()
-    return groupCpG
+        groupCpG.set_index(keys='id',inplace=True,drop=True)
+        return groupCpG
 
-# find matches between two sets, used by methMatch
-def match(a, b):
-    return list(set(a).intersection(b))
+# collapse the methylation and cpg frames, make into data frame by position
+def collapseMethCpG(groupMeth,groupCpG,num):
+    frames = [groupMeth,groupCpG]
+        groupCat = pd.concat(frames,axis=1)
+        groupCat.fillna('',inplace=True)#[-1]
+        groupCat['groupOverlap'] = groupCat.apply(lambda row:[i for i in row['groupMeth'] if i  in row['groupCpG']],axis=1)
+        groupCat['methNoOv'] = groupCat.apply(lambda row: [sorted(set(row['groupMeth']) - set(row['groupCpG']))],axis=1)
+        groupCat['cpgNoOv'] = groupCat.apply(lambda row: [sorted(set(row['groupCpG']) - set(row['groupMeth']))],axis=1)
+        noOvMethylation = groupCat['methNoOv'].apply(pd.Series).stack().tolist()
+        noOvMethylationList = sum(noOvMethylation,[])
+        noOvCpGCoverage = groupCat['cpgNoOv'].apply(pd.Series).stack().tolist()
+        noOvCpGCoverageList = sum(noOvCpGCoverage,[])
+        Methylated = groupCat['groupOverlap'].apply(pd.Series).stack().tolist()
+        methCpG = methylatedCpGFreq(Methylated,num)
+        methCpG.columns = ['CpGMethylation']
+        noOvCpG = methylatedCpGFreq(noOvCpGCoverageList,num)
+        noOvCpG.columns = ['unMethylatedCpG']
+        noOvMeth = methylatedCpGFreq(noOvMethylationList,num)
+        noOvMeth.columns = ['MethylationWOCpG']
+        frames = [methCpG,noOvCpG,noOvMeth]
+        methComp = pd.concat(frames,axis=1)
+        return methComp
+
+# collect methylated (cpg) frequencies by position of elements
+def methylatedCpGFreq(Methylated,num): # concatMeth from methIntersect
+    new_index = range(0,num)
+        pdMeth = pd.DataFrame(Methylated).astype(int)
+        pdMeth.columns = ['methLoc']
+        pdMeth['methFreq'] = pdMeth.groupby(['methLoc'])['methLoc'].transform('count')
+        dupMeth = pdMeth.sort_values(['methLoc'],ascending=True).drop_duplicates(['methLoc','methFreq']) # returns highest value of methylation
+        methIndex = dupMeth.set_index('methLoc').reindex(new_index,fill_value=0)
+        methIndex.index.name = None
+        methCpG = methIndex.astype(int)
+        return methCpG
 
 # match cpg and methylation locations
 def methMatch(sortMeth,rangeFeatures,num):
     groupMeth = methID(sortMeth)
         groupMeth.set_index(keys='id',inplace=True,drop=True)
-        groupCpG = cpgWindow(rangeFeatures,num)
-        groupCpG.set_index(keys='id',inplace=True,drop=True)
-        frames = [groupMeth,groupCpG]
-        groupCat = pd.concat(frames,axis=1)
-        groupCat['groupOv'] = groupCat.apply(lambda x: match(['groupMeth'],['groupCpG']))#set(['groupMeth']).intersection(['groupCpG'])
-        total = len(groupCat.index)
-        naOv = groupCat['groupOv'].isnull().sum()
-        print total, naOv
-        return groupCat
+        groupPosCpG = cpgWindow(rangeFeatures,num,'C')
+        groupNegCpG = cpgWindow(rangeFeatures,num,'G')
+        methCpGPos = collapseMethCpG(groupMeth,groupPosCpG,num)
+        methCpGNeg = collapseMethCpG(groupMeth,groupNegCpG,num)
+        return methCpGPos, methCpGNeg
 
 # append results from sliding window
 def appendWindow(rangeFeatures,num,uce,inuce,window):
@@ -435,7 +482,7 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         
         # First derivative
         ax7 = plt.subplot(gs[2,:],sharex=ax0)
-        ax7.plot(fillX,firstDer,linewidth=1, color='#3e1638',alpha=0.8) # mean.diff(), np.gradient(mean), numpy.diff(y) / numpy.diff(x)
+        ax7.plot(fillX,firstDer,linewidth=1, color='#3e1638',alpha=0.8)
         ax7.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
         ax7.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
         ax7.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
@@ -579,16 +626,34 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         
         gs = gridspec.GridSpec(3,1,height_ratios=[1,1,1])
         gs.update(hspace=.5)
+        #unMethylatedCpGPos, MethylationWOCpGPos
+        # Those that are methylated
+        pdCpGPos = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('CpGMethylationPos',case=False)]])
+        pdCpGNeg = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('CpGMethylationNeg',case=False)]])
+        # Methy without CpG
+        pdnoCpGPos = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('MethylationWOCpGPos',case=False)]])
+        pdnoCpGNeg = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('MethylationWOCpGNeg',case=False)]])
+        # CpG without Meth
+        pdnoMethPos = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('unMethylatedCpGPos',case=False)]])
+        pdnoMethNeg = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('unMethylatedCpGNeg',case=False)]])
+        # Methylation Data Intersections
         pdMethPer = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('Percentage',case=False)]])
         pdMethNum = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('Frequency',case=False)]])
         pdMethCov = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('Coverage',case=False)]])
+        # Transposes
         TPer = pdMethPer.T
         TNum = pdMethNum.T
+        TwoMethPos = pdnoMethPos.T
+        TwoMethNeg = pdnoMethNeg.T
+        TwoCpGPos = pdnoCpGPos.T
+        TwoCpGNeg = pdnoCpGNeg.T
         TCov = pdMethCov.T
+        TPos = pdCpGPos.T
+        TNeg = pdCpGNeg.T
         
-        # Make heatmap for % methylation (Percentage)
+        # Make heatmap for Positive Strand CpG Methylation
         ax16 = plt.subplot(gs[0,:],sharex=ax0)
-        heatmap1 = ax16.pcolormesh(TPer,cmap='RdPu')#col_cluster=False sns.clustermap
+        heatmap1 = ax16.pcolormesh(TPos,cmap='RdPu')#col_cluster=False sns.clustermap
         ax16.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
         ax16.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
         ax16.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
@@ -596,16 +661,55 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         ax16.set_ylabel('Sample',size=8)
         ax16.set_xlabel('Position',size=6)
         ax16.tick_params(labelsize=8)
-        ylabels1 = TPer.index.str.replace('.bed_Percentage','')
+        ylabels1 = TPos.index.str.replace('.bed_CpGMethylationPos','')
         ax16.set_yticklabels(ylabels1,minor=False)
-        ax16.set_yticks(np.arange(TPer.shape[0]) + 0.5, minor=False)
-        ax16.set_title('Methylation Percentage over Base Pair Position',size=8)
+        ax16.set_yticks(np.arange(TPos.shape[0]) + 0.5, minor=False)
+        ax16.set_title('Methylation of CpGs on Positive Strand over Base Pair Position',size=8)
         cbar1 = plt.colorbar(mappable=heatmap1,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
-        cbar1.set_clim(vmin=0, vmax=100)
+        #cbar1.set_clim(vmin=0, vmax=100)
         
-        # Make heatmap for % methylation (Percentage)
-        ax17 = plt.subplot(gs[1,:],sharex=ax0)
-        heatmap2 = ax17.pcolormesh(TCov,cmap='RdPu')#col_cluster=False sns.clustermap
+        # Make heatmap for Positive Strand CpG without Methylation
+        ax161 = plt.subplot(gs[1,:],sharex=ax0)
+        heatmap11 = ax161.pcolormesh(TwoMethPos,cmap='RdPu')#col_cluster=False sns.clustermap
+        ax161.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax161.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax161.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax161.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax161.set_ylabel('Sample',size=8)
+        ax161.set_xlabel('Position',size=6)
+        ax161.tick_params(labelsize=8)
+        ylabels11 = TwoMethPos.index.str.replace('.bed_unMethylatedCpGPos','')
+        ax161.set_yticklabels(ylabels11,minor=False)
+        ax161.set_yticks(np.arange(TwoMethPos.shape[0]) + 0.5, minor=False)
+        ax161.set_title('CpGs without Methylation on Positive Strand over Base Pair Position',size=8)
+        cbar11 = plt.colorbar(mappable=heatmap11,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        cbar11.set_clim(vmin=0, vmax=50)
+        
+        # Make heatmap for Positive Strand Methylation without CpG
+        ax162 = plt.subplot(gs[2,:],sharex=ax0)
+        heatmap12 = ax162.pcolormesh(TwoCpGPos,cmap='RdPu')#col_cluster=False sns.clustermap
+        ax162.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax162.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax162.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax162.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax162.set_ylabel('Sample',size=8)
+        ax162.set_xlabel('Position',size=6)
+        ax162.tick_params(labelsize=8)
+        ylabels12 = TwoCpGPos.index.str.replace('.bed_MethylationWOCpGPos','')
+        ax162.set_yticklabels(ylabels12,minor=False)
+        ax162.set_yticks(np.arange(TwoCpGPos.shape[0]) + 0.5, minor=False)
+        ax162.set_title('Methylation without CpGs on Positive Strand over Base Pair Position',size=8)
+        cbar12 = plt.colorbar(mappable=heatmap12,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        cbar12.set_clim(vmin=0, vmax=5)
+        
+        sns.despine()
+        pp.savefig()
+        gs = gridspec.GridSpec(3,1,height_ratios=[1,1,1])
+        gs.update(hspace=.5)
+        
+        # Make heatmap for Negitive Strand CpG Methylation
+        ax17 = plt.subplot(gs[0,:],sharex=ax0)
+        heatmap2 = ax17.pcolormesh(TNeg,cmap='RdPu')#col_cluster=False sns.clustermap
         ax17.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
         ax17.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
         ax17.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
@@ -613,18 +717,56 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         ax17.set_ylabel('Sample',size=8)
         ax17.set_xlabel('Position',size=6)
         ax17.tick_params(labelsize=8)
-        ylabels2 = TCov.index.str.replace('.bed_Coverage','')
+        ylabels2 = TNeg.index.str.replace('.bed_CpGMethylationNeg','')
         ax17.set_yticklabels(ylabels2,minor=False)
-        ax17.set_yticks(np.arange(TCov.shape[0]) + 0.5, minor=False)
-        ax17.set_title('Methylation Coverage over Base Pair Position',size=8)
+        ax17.set_yticks(np.arange(TNeg.shape[0]) + 0.5, minor=False)
+        ax17.set_title('Methylation of CpGs on Negitive Strand over Base Pair Position',size=8)
         cbar2 = plt.colorbar(mappable=heatmap2,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
-        cbar2.set_clim(vmin=0, vmax=100)
+        #cbar2.set_clim(vmin=0, vmax=100)
         
-        # Heat map for interaction of % and #
+        # Make heatmap for Negitive Strand CpG without Methylation
+        ax171 = plt.subplot(gs[1,:],sharex=ax0)
+        heatmap21 = ax171.pcolormesh(TwoMethNeg,cmap='RdPu')#col_cluster=False sns.clustermap
+        ax171.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax171.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax171.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax171.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax171.set_ylabel('Sample',size=8)
+        ax171.set_xlabel('Position',size=6)
+        ax171.tick_params(labelsize=8)
+        ylabels21 = TwoMethNeg.index.str.replace('.bed_unMethylatedCpGNeg','')
+        ax171.set_yticklabels(ylabels21,minor=False)
+        ax171.set_yticks(np.arange(TwoMethNeg.shape[0]) + 0.5, minor=False)
+        ax171.set_title('CpGs without Methylation on Negitive Strand over Base Pair Position',size=8)
+        cbar21 = plt.colorbar(mappable=heatmap21,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        cbar21.set_clim(vmin=0, vmax=50)
         
-        # Make heatmap for # methylation (Frequency)
-        ax18 = plt.subplot(gs[2,:],sharex=ax0)
-        heatmap3 = ax18.pcolormesh(TNum,cmap='RdPu')#col_cluster=False sns.clustermap
+        # Make heatmap for Negitive Strand Methylation without CpG
+        ax172 = plt.subplot(gs[2,:],sharex=ax0)
+        heatmap22 = ax172.pcolormesh(TwoCpGNeg,cmap='RdPu')#col_cluster=False sns.clustermap
+        ax172.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax172.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax172.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax172.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax172.set_ylabel('Sample',size=8)
+        ax172.set_xlabel('Position',size=6)
+        ax172.tick_params(labelsize=8)
+        ylabels22 = TwoCpGNeg.index.str.replace('.bed_MethylationWOCpGNeg','')
+        ax172.set_yticklabels(ylabels22,minor=False)
+        ax172.set_yticks(np.arange(TwoCpGNeg.shape[0]) + 0.5, minor=False)
+        ax172.set_title('Methylation without CpGs on Negitive Strand over Base Pair Position',size=8)
+        cbar22 = plt.colorbar(mappable=heatmap22,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        cbar22.set_clim(vmin=0, vmax=5)
+        
+        sns.despine()
+        pp.savefig()
+        
+        gs = gridspec.GridSpec(3,1,height_ratios=[1,1,1])
+        gs.update(hspace=.5)
+        
+        # Make heatmap for % methylation (Percentage)
+        ax18 = plt.subplot(gs[0,:],sharex=ax0)
+        heatmap3 = ax18.pcolormesh(TPer,cmap='RdPu')#col_cluster=False sns.clustermap
         ax18.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
         ax18.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
         ax18.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
@@ -632,14 +774,48 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         ax18.set_ylabel('Sample',size=8)
         ax18.set_xlabel('Position',size=6)
         ax18.tick_params(labelsize=8)
-        ylabels3 = TNum.index.str.replace('.bed_Frequency','')
+        ylabels3 = TPer.index.str.replace('.bed_Percentage','')
         ax18.set_yticklabels(ylabels3,minor=False)
-        ax18.set_yticks(np.arange(TNum.shape[0]) + 0.5, minor=False)
-        ax18.set_title('Methylation Frequency over Base Pair Position',size=8)
+        ax18.set_yticks(np.arange(TPer.shape[0]) + 0.5, minor=False)
+        ax18.set_title('Methylation Percentage over Base Pair Position',size=8)
         cbar3 = plt.colorbar(mappable=heatmap3,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
-        cbar3.set_clim(vmin=0, vmax=5)
+        cbar3.set_clim(vmin=0, vmax=100)
         
-        # Heat map for % methlation of cpg
+        # Make heatmap for methylation coverage, capped at 1000
+        ax19 = plt.subplot(gs[1,:],sharex=ax0)
+        heatmap4 = ax19.pcolormesh(TCov,cmap='RdPu')#col_cluster=False sns.clustermap
+        ax19.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax19.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax19.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax19.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax19.set_ylabel('Sample',size=8)
+        ax19.set_xlabel('Position',size=6)
+        ax19.tick_params(labelsize=8)
+        ylabels4 = TCov.index.str.replace('.bed_Coverage','')
+        ax19.set_yticklabels(ylabels4,minor=False)
+        ax19.set_yticks(np.arange(TCov.shape[0]) + 0.5, minor=False)
+        ax19.set_title('Methylation Coverage over Base Pair Position',size=8)
+        cbar4 = plt.colorbar(mappable=heatmap4,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        cbar4.set_clim(vmin=0, vmax=100)
+        
+        # Heat map for interaction of % and #
+        
+        # Make heatmap for # methylation (Frequency)
+        ax20 = plt.subplot(gs[2,:],sharex=ax0)
+        heatmap5 = ax20.pcolormesh(TNum,cmap='RdPu')#col_cluster=False sns.clustermap
+        ax20.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax20.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        ax20.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax20.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        ax20.set_ylabel('Sample',size=8)
+        ax20.set_xlabel('Position',size=6)
+        ax20.tick_params(labelsize=8)
+        ylabels5 = TNum.index.str.replace('.bed_Frequency','')
+        ax20.set_yticklabels(ylabels5,minor=False)
+        ax20.set_yticks(np.arange(TNum.shape[0]) + 0.5, minor=False)
+        ax20.set_title('Methylation Frequency over Base Pair Position',size=8)
+        cbar5 = plt.colorbar(mappable=heatmap5,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        cbar5.set_clim(vmin=0, vmax=5)
         
         sns.despine()
         pp.savefig()
@@ -652,14 +828,13 @@ def reverseComplement(sequence):
 
 # separate by directionality
 def dirLine(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
-    DirList = ["+","-"]#,"="
+    DirList = ["+","-","="]
         for direction in DirList:
             dirStr = (rangeFeatures[(rangeFeatures['compareBoundaries'] == direction)])
-                #savePanda(dirStr[['chr','start','end','type']], '{0}_30_coordinates_{1}.bed'.format(direction,fileName)) # prints the bed file for each directionality
-                dirWindow, dirWinCpG, dirWinA, dirWinT, dirWinG, dirWinC, dirWinMo = dataframeWindow(dirStr,num,uce,inuce,window)
-                pddirMeth= methPositions(mFiles,dirStr,num,uce,inuce,methThresh)
-                endLinegraphs(pddirMeth,dirWindow,dirWinCpG,dirWinA,dirWinT,dirWinG,dirWinC,dirWinMo,'{0}_30_{1}'.format(direction,fileName),num,uce,inuce,window)
-        # More drawn out performance of sliding window and methylation collection in order to collect reverse complement super imposed
+                if len(dirStr.index) != 0:
+                    dirWindow, dirWinCpG, dirWinA, dirWinT, dirWinG, dirWinC, dirWinMo = dataframeWindow(dirStr,num,uce,inuce,window)
+                        pddirMeth= methPositions(mFiles,dirStr,num,uce,inuce,methThresh)
+                        endLinegraphs(pddirMeth,dirWindow,dirWinCpG,dirWinA,dirWinT,dirWinG,dirWinC,dirWinMo,'{0}_30_{1}'.format(direction,fileName),num,uce,inuce,window)
         negStr = (rangeFeatures[(rangeFeatures['compareBoundaries'] == '-')])
         outComp, outCpG, compA, compT, compG, compC, compMo, outnegMeth = [], [], [], [], [], [], [], []
         for element in negStr['reverseComplement']:
@@ -674,11 +849,15 @@ def dirLine(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
         for methName in mFiles:
             methFeatures = eachFileProcess(methName)
                 pdmethThresh = methThreshold(methFeatures,methThresh)
-                methPosition = methIntersect(negStr,pdmethThresh,num,uce,inuce,methThresh)
-                #groupCat = methMatch(methPosition,negStr,num) # going to have to think carefully about this
+                methPosition = methIntersect(negStr,pdmethThresh,num,uce,inuce)
+                methCpGPos, methCpGNeg = methMatch(methPosition,rangeFeatures,num)
+                methCpGPos.columns = ['{0}_CpGMethylationPos'.format(methName),'{0}_unMethylatedCpGPos'.format(methName),'{0}_MethylationWOCpGPos'.format(methName)]
+                methCpGNeg.columns = ['{0}_CpGMethylationNeg'.format(methName),'{0}_unMethylatedCpGNeg'.format(methName),'{0}_MethylationWOCpGNeg'.format(methName)]
                 methFreq = methylationFreq(methPosition,num)
                 methFreq.columns = ['{0}_Percentage'.format(methName),'{0}_Coverage'.format(methName),'{0}_Frequency'.format(methName)]
-                outnegMeth.append(methFreq)
+                frames = [methFreq,methCpGPos,methCpGNeg]
+                pdMethEx = pd.concat(frames,axis=1)
+                outnegMeth.append(pdMethEx)
 posStr = (rangeFeatures[(rangeFeatures['compareBoundaries'] == '+')])
     for element in posStr['combineString']:
         posFeature, posCpGfeature,posAfeature, posTfeature, posGfeature, posCfeature,posMofeature = slidingWindow(element,num,uce,inuce,window)
@@ -690,7 +869,7 @@ posStr = (rangeFeatures[(rangeFeatures['compareBoundaries'] == '+')])
                 compC.append(posCfeature)
                 compMo.append(posMofeature)
         compWindow,compWinCpG,compWinA,compWinT,compWinG,compWinC,compWinMo = pd.DataFrame(outComp),pd.DataFrame(outCpG),pd.DataFrame(compA),pd.DataFrame(compT),pd.DataFrame(compG),pd.DataFrame(compC),pd.DataFrame(compMo)
-        pdposMeth, posgroupCat = methPositions(mFiles,posStr,num,uce,inuce,methThresh)
+        pdposMeth = methPositions(mFiles,posStr,num,uce,inuce,methThresh)
         pdnegMeth = pd.concat(outnegMeth,axis=1)
         pdnegInMeth = pdnegMeth.iloc[::-1] # reverse order 
         pdnegInsetMeth = pdnegInMeth.reset_index(drop=True) # make new index, don't make old one into column
@@ -701,12 +880,24 @@ posStr = (rangeFeatures[(rangeFeatures['compareBoundaries'] == '+')])
         pdgroupMethNum = pdcompMethNum.groupby(pdcompMethNum.columns, axis=1).sum() # need to sum over Frequency
         pdcompMethCov = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('Coverage',case=False)]])
         pdgroupMethCov = pdcompMethCov.groupby(pdcompMethCov.columns, axis=1).mean() # need to average over Coverage
-        pdgroupMeth = pd.concat([pdgroupMethPer,pdgroupMethNum],axis=1)
+        pdcompMethPos = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('CpGMethylationPos',case=False)]])
+        pdgroupMethPos = pdcompMethPos.groupby(pdcompMethPos.columns, axis=1).sum()
+        pdcompMethNeg = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('CpGMethylationNeg',case=False)]])
+        pdgroupMethNeg = pdcompMethNeg.groupby(pdcompMethNeg.columns, axis=1).sum()
+        pdcompUNMethPos = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('unMethylatedCpGPos',case=False)]])
+        pdgroupUNMethPos = pdcompMethPos.groupby(pdcompMethPos.columns, axis=1).sum()
+        pdcompUNMethNeg = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('unMethylatedCpGNeg',case=False)]])
+        pdgroupUNMethNeg = pdcompMethNeg.groupby(pdcompMethNeg.columns, axis=1).sum()
+        pdcompWOMethPos = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('MethylationWOCpGPos',case=False)]])
+        pdgroupWOMethPos = pdcompMethPos.groupby(pdcompMethPos.columns, axis=1).sum()
+        pdcompWOMethNeg = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('MethylationWOCpGNeg',case=False)]])
+        pdgroupWOMethNeg = pdcompMethNeg.groupby(pdcompMethNeg.columns, axis=1).sum()
+        pdgroupMeth = pd.concat([pdgroupMethPer,pdgroupMethNum,pdgroupMethPos,pdgroupMethNeg,pdgroupUNMethPos,pdgroupUNMethNeg,pdgroupWOMethPos,pdgroupWOMethNeg],axis=1)
     endLinegraphs(pdgroupMeth,compWindow,compWinCpG,compWinA,compWinT,compWinG,compWinC,compWinMo,'revComp_30_{0}'.format(fileName),num,uce,inuce,window)
 
 # save file from panda
 def savePanda(pdData, strFilename):
-    pdData.to_csv(strFilename, sep='\t', header=False, index=False)
+    pdData.to_csv(strFilename, sep='\t', header=True, index=True)
 
 # out put directionality, as inferred by comparing first and last n base pairs
 def compareN(element,size):
@@ -731,10 +922,11 @@ def perType(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
     typeList = ['intergenic','intronic','exonic']
         for type in typeList:
             boolType = (rangeFeatures[rangeFeatures['type'] == type])
-                pdWindow, pdTypeCpG, pdTypeA, pdTypeT, pdTypeG, pdTypeC, pdTypeMo = dataframeWindow(boolType,num,uce,inuce,window)
-                pdMeth = methPositions(mFiles,boolType,num,uce,inuce,methThresh)
-                endLinegraphs(pdMeth,pdWindow,pdTypeCpG,pdTypeA,pdTypeT,pdTypeG,pdTypeC,pdTypeMo,'{0}_{1}'.format(type,fileName),num,uce,inuce,window)
-                dirLine(boolType,'{0}_{1}'.format(type,fileName),mFiles,num,uce,inuce,window,methThresh)
+                if len(boolType.index) != 0:
+                    pdWindow, pdTypeCpG, pdTypeA, pdTypeT, pdTypeG, pdTypeC, pdTypeMo = dataframeWindow(boolType,num,uce,inuce,window)
+                        pdMeth = methPositions(mFiles,boolType,num,uce,inuce,methThresh)
+                        endLinegraphs(pdMeth,pdWindow,pdTypeCpG,pdTypeA,pdTypeT,pdTypeG,pdTypeC,pdTypeMo,'{0}_{1}'.format(type,fileName),num,uce,inuce,window)
+                        dirLine(boolType,'{0}_{1}'.format(type,fileName),mFiles,num,uce,inuce,window,methThresh)
 
 def main():
     # Collect arguments
@@ -753,12 +945,10 @@ def main():
         for fileName in eFiles:
             btFeatures = eachFileProcess(fileName)
                 subsetFeatures = getRange(btFeatures, fileName,num,uce,inuce)
-                #saveAll, saveExonic, saveIntronic, saveIntergenic = getFasta(btFeatures,faGenome,fileName)
                 rangeFeatures = btRange(subsetFeatures,faGenome)
-                #http://stackoverflow.com/questions/19828822/how-to-check-whether-a-pandas-dataframe-is-empty
                 pdWindow, pdCpG, pdA, pdT, pdG, pdC, pdMo = dataframeWindow(rangeFeatures,num,uce,inuce,window)
                 pdMeth = methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh)
-# 		endLinegraphs(pdMeth,pdWindow,pdCpG,pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,inuce,window)
+                endLinegraphs(pdMeth,pdWindow,pdCpG,pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,inuce,window)
 # 		directionFeatures = evalN(rangeFeatures,fileName,binDir)
 # 		dirLine(directionFeatures,fileName,mFiles,num,uce,inuce,window,methThresh)
 # 		perType(directionFeatures,fileName,mFiles,num,uce,inuce,window,methThresh)
