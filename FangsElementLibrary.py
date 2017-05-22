@@ -150,8 +150,8 @@ def methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh):
                 pdmethThresh = methThreshold(methFeatures,methThresh)
                 methPosition = methIntersect(rangeFeatures,pdmethThresh,num,uce,inuce)
                 methCpGPos, methCpGNeg = methMatch(methPosition,rangeFeatures,num) #integrate with revComp, ect
-                methCpGPos.columns = ['{0}_CpGMethylationPos'.format(methName),'{0}_unMethylatedCpGPos'.format(methName),'{0}_MethylationWOCpGPos'.format(methName)]
-                methCpGNeg.columns = ['{0}_CpGMethylationNeg'.format(methName),'{0}_unMethylatedCpGNeg'.format(methName),'{0}_MethylationWOCpGNeg'.format(methName)]
+                methCpGPos.columns = ['{0}_CpGMethylationPos'.format(methName)]#,'{0}_unMethylatedCpGPos'.format(methName),'{0}_MethylationWOCpGPos'.format(methName)
+                methCpGNeg.columns = ['{0}_CpGMethylationNeg'.format(methName)]# ,'{0}_unMethylatedCpGNeg'.format(methName),'{0}_MethylationWOCpGNeg'.format(methName)
                 pdmethFreq = methylationFreq(methPosition,num)
                 pdmethFreq.columns = ['{0}_Percentage'.format(methName),'{0}_Coverage'.format(methName),'{0}_Frequency'.format(methName)]
                 frames = [pdmethFreq,methCpGPos,methCpGNeg]
@@ -235,9 +235,8 @@ def methID(sortMeth):
         return groupMeth
 
 # return locations of cpgs attached to the id they came from
-def cpgWindow(rangeFeatures,num,stFeature):
-    stringDF = rangeFeatures[['id','combineString']]
-        out = []
+def cpgWindow(stringDF,num,stFeature):
+    out = []
         for element, id in zip(stringDF['combineString'],stringDF['id']):
             index = 0
                 while index < len(element): # or num
@@ -246,17 +245,19 @@ def cpgWindow(rangeFeatures,num,stFeature):
                             break
                         outtemp = []
                         outtemp.append(id)
-                        #outtemp.append(index-1)
                         outtemp.append(index)
-                        #outtemp.append(index+1)
                         index += len(stFeature) # or 1
                     out.append(outtemp)
     pdout = pd.DataFrame(out)
-        print pdout
         pdout.columns = ['id','cpg']
         groupCpG = pdout.groupby(['id'])['cpg'].apply(list).to_frame(name = 'groupCpG').reset_index()
         groupCpG.set_index(keys='id',inplace=True,drop=True)
         return groupCpG
+
+def cpgContext(groupCpG,stringDF):
+    stringDF.set_index(keys='id',inplace=True,drop=True)
+        mergeDF = stringDF.merge(groupCpG,how='inner',on=index)
+        print mergeDF
 
 # collapse the methylation and cpg frames, make into data frame by position
 def collapseMethCpG(groupMeth,groupCpG,num):
@@ -264,22 +265,22 @@ def collapseMethCpG(groupMeth,groupCpG,num):
         groupCat = pd.concat(frames,axis=1)
         groupCat.fillna('',inplace=True)#[-1]
         groupCat['groupOverlap'] = groupCat.apply(lambda row:[i for i in row['groupMeth'] if i  in row['groupCpG']],axis=1)
-        groupCat['methNoOv'] = groupCat.apply(lambda row: [sorted(set(row['groupMeth']) - set(row['groupCpG']))],axis=1)
-        groupCat['cpgNoOv'] = groupCat.apply(lambda row: [sorted(set(row['groupCpG']) - set(row['groupMeth']))],axis=1)
-        noOvMethylation = groupCat['methNoOv'].apply(pd.Series).stack().tolist()
-        noOvMethylationList = sum(noOvMethylation,[])
-        noOvCpGCoverage = groupCat['cpgNoOv'].apply(pd.Series).stack().tolist()
-        noOvCpGCoverageList = sum(noOvCpGCoverage,[])
+        # 	groupCat['methNoOv'] = groupCat.apply(lambda row: [sorted(set(row['groupMeth']) - set(row['groupCpG']))],axis=1)
+        # 	groupCat['cpgNoOv'] = groupCat.apply(lambda row: [sorted(set(row['groupCpG']) - set(row['groupMeth']))],axis=1)
+        # 	noOvMethylation = groupCat['methNoOv'].apply(pd.Series).stack().tolist()
+        # 	noOvMethylationList = sum(noOvMethylation,[])
+        # 	noOvCpGCoverage = groupCat['cpgNoOv'].apply(pd.Series).stack().tolist()
+        # 	noOvCpGCoverageList = sum(noOvCpGCoverage,[])
         Methylated = groupCat['groupOverlap'].apply(pd.Series).stack().tolist()
         methCpG = methylatedCpGFreq(Methylated,num)
-        methCpG.columns = ['CpGMethylation']
-        noOvCpG = methylatedCpGFreq(noOvCpGCoverageList,num)
-        noOvCpG.columns = ['unMethylatedCpG']
-        noOvMeth = methylatedCpGFreq(noOvMethylationList,num)
-        noOvMeth.columns = ['MethylationWOCpG']
-        frames = [methCpG,noOvCpG,noOvMeth]
-        methComp = pd.concat(frames,axis=1)
-        return methComp
+        # 	methCpG.columns = ['CpGMethylation']
+        # 	noOvCpG = methylatedCpGFreq(noOvCpGCoverageList,num)
+        # 	noOvCpG.columns = ['unMethylatedCpG']
+        # 	noOvMeth = methylatedCpGFreq(noOvMethylationList,num)
+        # 	noOvMeth.columns = ['MethylationWOCpG']
+        # 	frames = [methCpG,noOvCpG,noOvMeth]
+        # 	methComp = pd.concat(frames,axis=1)
+        return methCpG
 
 # collect methylated (cpg) frequencies by position of elements
 def methylatedCpGFreq(Methylated,num): # concatMeth from methIntersect
@@ -293,12 +294,18 @@ def methylatedCpGFreq(Methylated,num): # concatMeth from methIntersect
         methCpG = methIndex.astype(int)
         return methCpG
 
-# match cpg and methylation locations
+# match cpg and methylation locations, get the context for methylated cpg
 def methMatch(sortMeth,rangeFeatures,num):
-    groupMeth = methID(sortMeth)
+    stringDF = rangeFeatures[['id','combineString']]
+        groupMeth = methID(sortMeth)
         groupMeth.set_index(keys='id',inplace=True,drop=True)
-        groupPosCpG = cpgWindow(rangeFeatures,num,'C')
-        groupNegCpG = cpgWindow(rangeFeatures,num,'G')
+        groupPosCpG = cpgWindow(stringDF,num,'C')
+        groupNegCpG = cpgWindow(stringDF,num,'G')
+        
+        # something that gets the context here?
+        # still have to match to methylated ones!!
+        surroundContext = cpgContext(groupPosCpG,stringDF)
+        
         methCpGPos = collapseMethCpG(groupMeth,groupPosCpG,num)
         methCpGNeg = collapseMethCpG(groupMeth,groupNegCpG,num)
         return methCpGPos, methCpGNeg
@@ -624,18 +631,18 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         sns.despine()
         pp.savefig()
         
-        gs = gridspec.GridSpec(3,1,height_ratios=[1,1,1])
+        gs = gridspec.GridSpec(2,1,height_ratios=[1,1])
         gs.update(hspace=.5)
         #unMethylatedCpGPos, MethylationWOCpGPos
         # Those that are methylated
         pdCpGPos = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('CpGMethylationPos',case=False)]])
         pdCpGNeg = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('CpGMethylationNeg',case=False)]])
         # Methy without CpG
-        pdnoCpGPos = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('MethylationWOCpGPos',case=False)]])
-        pdnoCpGNeg = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('MethylationWOCpGNeg',case=False)]])
+        # 	pdnoCpGPos = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('MethylationWOCpGPos',case=False)]])
+        # 	pdnoCpGNeg = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('MethylationWOCpGNeg',case=False)]])
         # CpG without Meth
-        pdnoMethPos = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('unMethylatedCpGPos',case=False)]])
-        pdnoMethNeg = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('unMethylatedCpGNeg',case=False)]])
+        # 	pdnoMethPos = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('unMethylatedCpGPos',case=False)]])
+        # 	pdnoMethNeg = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('unMethylatedCpGNeg',case=False)]])
         # Methylation Data Intersections
         pdMethPer = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('Percentage',case=False)]])
         pdMethNum = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('Frequency',case=False)]])
@@ -643,10 +650,10 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         # Transposes
         TPer = pdMethPer.T
         TNum = pdMethNum.T
-        TwoMethPos = pdnoMethPos.T
-        TwoMethNeg = pdnoMethNeg.T
-        TwoCpGPos = pdnoCpGPos.T
-        TwoCpGNeg = pdnoCpGNeg.T
+        # 	TwoMethPos = pdnoMethPos.T
+        # 	TwoMethNeg = pdnoMethNeg.T
+        # 	TwoCpGPos = pdnoCpGPos.T
+        # 	TwoCpGNeg = pdnoCpGNeg.T
         TCov = pdMethCov.T
         TPos = pdCpGPos.T
         TNeg = pdCpGNeg.T
@@ -668,44 +675,44 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         cbar1 = plt.colorbar(mappable=heatmap1,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
         #cbar1.set_clim(vmin=0, vmax=100)
         
-        # Make heatmap for Positive Strand CpG without Methylation
-        ax161 = plt.subplot(gs[1,:],sharex=ax0)
-        heatmap11 = ax161.pcolormesh(TwoMethPos,cmap='RdPu')#col_cluster=False sns.clustermap
-        ax161.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
-        ax161.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
-        ax161.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
-        ax161.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
-        ax161.set_ylabel('Sample',size=8)
-        ax161.set_xlabel('Position',size=6)
-        ax161.tick_params(labelsize=8)
-        ylabels11 = TwoMethPos.index.str.replace('.bed_unMethylatedCpGPos','')
-        ax161.set_yticklabels(ylabels11,minor=False)
-        ax161.set_yticks(np.arange(TwoMethPos.shape[0]) + 0.5, minor=False)
-        ax161.set_title('CpGs without Methylation on Positive Strand over Base Pair Position',size=8)
-        cbar11 = plt.colorbar(mappable=heatmap11,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
-        cbar11.set_clim(vmin=0, vmax=50)
-        
-        # Make heatmap for Positive Strand Methylation without CpG
-        ax162 = plt.subplot(gs[2,:],sharex=ax0)
-        heatmap12 = ax162.pcolormesh(TwoCpGPos,cmap='RdPu')#col_cluster=False sns.clustermap
-        ax162.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
-        ax162.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
-        ax162.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
-        ax162.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
-        ax162.set_ylabel('Sample',size=8)
-        ax162.set_xlabel('Position',size=6)
-        ax162.tick_params(labelsize=8)
-        ylabels12 = TwoCpGPos.index.str.replace('.bed_MethylationWOCpGPos','')
-        ax162.set_yticklabels(ylabels12,minor=False)
-        ax162.set_yticks(np.arange(TwoCpGPos.shape[0]) + 0.5, minor=False)
-        ax162.set_title('Methylation without CpGs on Positive Strand over Base Pair Position',size=8)
-        cbar12 = plt.colorbar(mappable=heatmap12,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
-        cbar12.set_clim(vmin=0, vmax=5)
-        
-        sns.despine()
-        pp.savefig()
-        gs = gridspec.GridSpec(3,1,height_ratios=[1,1,1])
-        gs.update(hspace=.5)
+        # 	Make heatmap for Positive Strand CpG without Methylation
+        # 	ax161 = plt.subplot(gs[1,:],sharex=ax0)
+        # 	heatmap11 = ax161.pcolormesh(TwoMethPos,cmap='RdPu')#col_cluster=False sns.clustermap
+        # 	ax161.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax161.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax161.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax161.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax161.set_ylabel('Sample',size=8)
+        # 	ax161.set_xlabel('Position',size=6)
+        # 	ax161.tick_params(labelsize=8)
+        # 	ylabels11 = TwoMethPos.index.str.replace('.bed_unMethylatedCpGPos','')
+        # 	ax161.set_yticklabels(ylabels11,minor=False)
+        # 	ax161.set_yticks(np.arange(TwoMethPos.shape[0]) + 0.5, minor=False)
+        # 	ax161.set_title('CpGs without Methylation on Positive Strand over Base Pair Position',size=8)
+        # 	cbar11 = plt.colorbar(mappable=heatmap11,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        # 	cbar11.set_clim(vmin=0, vmax=50)
+        #
+        # 	Make heatmap for Positive Strand Methylation without CpG
+        # 	ax162 = plt.subplot(gs[2,:],sharex=ax0)
+        # 	heatmap12 = ax162.pcolormesh(TwoCpGPos,cmap='RdPu')#col_cluster=False sns.clustermap
+        # 	ax162.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax162.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax162.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax162.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax162.set_ylabel('Sample',size=8)
+        # 	ax162.set_xlabel('Position',size=6)
+        # 	ax162.tick_params(labelsize=8)
+        # 	ylabels12 = TwoCpGPos.index.str.replace('.bed_MethylationWOCpGPos','')
+        # 	ax162.set_yticklabels(ylabels12,minor=False)
+        # 	ax162.set_yticks(np.arange(TwoCpGPos.shape[0]) + 0.5, minor=False)
+        # 	ax162.set_title('Methylation without CpGs on Positive Strand over Base Pair Position',size=8)
+        # 	cbar12 = plt.colorbar(mappable=heatmap12,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        # 	cbar12.set_clim(vmin=0, vmax=5)
+        #
+        # 	sns.despine()
+        # 	pp.savefig()
+        # 	gs = gridspec.GridSpec(3,1,height_ratios=[1,1,1])
+        # 	gs.update(hspace=.5)
         
         # Make heatmap for Negitive Strand CpG Methylation
         ax17 = plt.subplot(gs[0,:],sharex=ax0)
@@ -723,40 +730,42 @@ def endLinegraphs(pdMeth,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,i
         ax17.set_title('Methylation of CpGs on Negitive Strand over Base Pair Position',size=8)
         cbar2 = plt.colorbar(mappable=heatmap2,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
         #cbar2.set_clim(vmin=0, vmax=100)
+        #
+        # 	# Make heatmap for Negitive Strand CpG without Methylation
+        # 	ax171 = plt.subplot(gs[1,:],sharex=ax0)
+        # 	heatmap21 = ax171.pcolormesh(TwoMethNeg,cmap='RdPu')#col_cluster=False sns.clustermap
+        # 	ax171.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax171.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax171.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax171.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax171.set_ylabel('Sample',size=8)
+        # 	ax171.set_xlabel('Position',size=6)
+        # 	ax171.tick_params(labelsize=8)
+        # 	ylabels21 = TwoMethNeg.index.str.replace('.bed_unMethylatedCpGNeg','')
+        # 	ax171.set_yticklabels(ylabels21,minor=False)
+        # 	ax171.set_yticks(np.arange(TwoMethNeg.shape[0]) + 0.5, minor=False)
+        # 	ax171.set_title('CpGs without Methylation on Negitive Strand over Base Pair Position',size=8)
+        # 	cbar21 = plt.colorbar(mappable=heatmap21,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        # 	cbar21.set_clim(vmin=0, vmax=50)
+        #
+        # 	# Make heatmap for Negitive Strand Methylation without CpG
+        # 	ax172 = plt.subplot(gs[2,:],sharex=ax0)
+        # 	heatmap22 = ax172.pcolormesh(TwoCpGNeg,cmap='RdPu')#col_cluster=False sns.clustermap
+        # 	ax172.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax172.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
+        # 	ax172.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax172.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
+        # 	ax172.set_ylabel('Sample',size=8)
+        # 	ax172.set_xlabel('Position',size=6)
+        # 	ax172.tick_params(labelsize=8)
+        # 	ylabels22 = TwoCpGNeg.index.str.replace('.bed_MethylationWOCpGNeg','')
+        # 	ax172.set_yticklabels(ylabels22,minor=False)
+        # 	ax172.set_yticks(np.arange(TwoCpGNeg.shape[0]) + 0.5, minor=False)
+        # 	ax172.set_title('Methylation without CpGs on Negitive Strand over Base Pair Position',size=8)
+        # 	cbar22 = plt.colorbar(mappable=heatmap22,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
+        # 	cbar22.set_clim(vmin=0, vmax=5)
         
-        # Make heatmap for Negitive Strand CpG without Methylation
-        ax171 = plt.subplot(gs[1,:],sharex=ax0)
-        heatmap21 = ax171.pcolormesh(TwoMethNeg,cmap='RdPu')#col_cluster=False sns.clustermap
-        ax171.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
-        ax171.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
-        ax171.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
-        ax171.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
-        ax171.set_ylabel('Sample',size=8)
-        ax171.set_xlabel('Position',size=6)
-        ax171.tick_params(labelsize=8)
-        ylabels21 = TwoMethNeg.index.str.replace('.bed_unMethylatedCpGNeg','')
-        ax171.set_yticklabels(ylabels21,minor=False)
-        ax171.set_yticks(np.arange(TwoMethNeg.shape[0]) + 0.5, minor=False)
-        ax171.set_title('CpGs without Methylation on Negitive Strand over Base Pair Position',size=8)
-        cbar21 = plt.colorbar(mappable=heatmap21,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
-        cbar21.set_clim(vmin=0, vmax=50)
-        
-        # Make heatmap for Negitive Strand Methylation without CpG
-        ax172 = plt.subplot(gs[2,:],sharex=ax0)
-        heatmap22 = ax172.pcolormesh(TwoCpGNeg,cmap='RdPu')#col_cluster=False sns.clustermap
-        ax172.axvline(x=(((num-uce)/2)+inuce),linewidth=.05,linestyle='dashed',color='#e7298a')
-        ax172.axvline(x=(((num-uce)/2)+(uce-inuce)),linewidth=.05,linestyle='dashed',color='#e7298a')
-        ax172.axvline(x=((num-uce)/2),linewidth=.05,linestyle='dashed',color='#bd4973')
-        ax172.axvline(x=(((num-uce)/2)+uce),linewidth=.05,linestyle='dashed',color='#bd4973')
-        ax172.set_ylabel('Sample',size=8)
-        ax172.set_xlabel('Position',size=6)
-        ax172.tick_params(labelsize=8)
-        ylabels22 = TwoCpGNeg.index.str.replace('.bed_MethylationWOCpGNeg','')
-        ax172.set_yticklabels(ylabels22,minor=False)
-        ax172.set_yticks(np.arange(TwoCpGNeg.shape[0]) + 0.5, minor=False)
-        ax172.set_title('Methylation without CpGs on Negitive Strand over Base Pair Position',size=8)
-        cbar22 = plt.colorbar(mappable=heatmap22,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
-        cbar22.set_clim(vmin=0, vmax=5)
+        # Sum methylation as a check
         
         sns.despine()
         pp.savefig()
@@ -851,8 +860,8 @@ def dirLine(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
                 pdmethThresh = methThreshold(methFeatures,methThresh)
                 methPosition = methIntersect(negStr,pdmethThresh,num,uce,inuce)
                 methCpGPos, methCpGNeg = methMatch(methPosition,rangeFeatures,num)
-                methCpGPos.columns = ['{0}_CpGMethylationPos'.format(methName),'{0}_unMethylatedCpGPos'.format(methName),'{0}_MethylationWOCpGPos'.format(methName)]
-                methCpGNeg.columns = ['{0}_CpGMethylationNeg'.format(methName),'{0}_unMethylatedCpGNeg'.format(methName),'{0}_MethylationWOCpGNeg'.format(methName)]
+                methCpGPos.columns = ['{0}_CpGMethylationPos'.format(methName)]#,'{0}_unMethylatedCpGPos'.format(methName),'{0}_MethylationWOCpGPos'.format(methName)
+                methCpGNeg.columns = ['{0}_CpGMethylationNeg'.format(methName)]#,'{0}_unMethylatedCpGNeg'.format(methName),'{0}_MethylationWOCpGNeg'.format(methName)
                 methFreq = methylationFreq(methPosition,num)
                 methFreq.columns = ['{0}_Percentage'.format(methName),'{0}_Coverage'.format(methName),'{0}_Frequency'.format(methName)]
                 frames = [methFreq,methCpGPos,methCpGNeg]
@@ -884,15 +893,15 @@ posStr = (rangeFeatures[(rangeFeatures['compareBoundaries'] == '+')])
         pdgroupMethPos = pdcompMethPos.groupby(pdcompMethPos.columns, axis=1).sum()
         pdcompMethNeg = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('CpGMethylationNeg',case=False)]])
         pdgroupMethNeg = pdcompMethNeg.groupby(pdcompMethNeg.columns, axis=1).sum()
-        pdcompUNMethPos = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('unMethylatedCpGPos',case=False)]])
-        pdgroupUNMethPos = pdcompMethPos.groupby(pdcompMethPos.columns, axis=1).sum()
-        pdcompUNMethNeg = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('unMethylatedCpGNeg',case=False)]])
-        pdgroupUNMethNeg = pdcompMethNeg.groupby(pdcompMethNeg.columns, axis=1).sum()
-        pdcompWOMethPos = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('MethylationWOCpGPos',case=False)]])
-        pdgroupWOMethPos = pdcompMethPos.groupby(pdcompMethPos.columns, axis=1).sum()
-        pdcompWOMethNeg = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('MethylationWOCpGNeg',case=False)]])
-        pdgroupWOMethNeg = pdcompMethNeg.groupby(pdcompMethNeg.columns, axis=1).sum()
-        pdgroupMeth = pd.concat([pdgroupMethPer,pdgroupMethNum,pdgroupMethPos,pdgroupMethNeg,pdgroupUNMethPos,pdgroupUNMethNeg,pdgroupWOMethPos,pdgroupWOMethNeg],axis=1)
+        # 	pdcompUNMethPos = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('unMethylatedCpGPos',case=False)]])
+        # 	pdgroupUNMethPos = pdcompMethPos.groupby(pdcompMethPos.columns, axis=1).sum()
+        # 	pdcompUNMethNeg = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('unMethylatedCpGNeg',case=False)]])
+        # 	pdgroupUNMethNeg = pdcompMethNeg.groupby(pdcompMethNeg.columns, axis=1).sum()
+        # 	pdcompWOMethPos = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('MethylationWOCpGPos',case=False)]])
+        # 	pdgroupWOMethPos = pdcompMethPos.groupby(pdcompMethPos.columns, axis=1).sum()
+        # 	pdcompWOMethNeg = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('MethylationWOCpGNeg',case=False)]])
+        # 	pdgroupWOMethNeg = pdcompMethNeg.groupby(pdcompMethNeg.columns, axis=1).sum()
+        pdgroupMeth = pd.concat([pdgroupMethPer,pdgroupMethNum,pdgroupMethPos,pdgroupMethNeg],axis=1)#,pdgroupUNMethPos,pdgroupUNMethNeg,pdgroupWOMethPos,pdgroupWOMethNeg
     endLinegraphs(pdgroupMeth,compWindow,compWinCpG,compWinA,compWinT,compWinG,compWinC,compWinMo,'revComp_30_{0}'.format(fileName),num,uce,inuce,window)
 
 # save file from panda
