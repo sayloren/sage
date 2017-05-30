@@ -30,8 +30,8 @@ def get_args():
         parser.add_argument("file", type=argparse.FileType('rU'), help='A file containing a'
                             'list of paths to the feature files you want to process, '
                             'separated by newlines')
-                            parser.add_argument("-b", "--bin", type=str, default="Bins_for_density_0based.bed"
-                                                parser.add_argument("-m", "--mode", type=str, default="mean"))
+                            parser.add_argument("-b", "--bin", type=str, default="Bins_for_density_0based.bed")
+                            parser.add_argument("-m", "--mode", type=str, default="mean") # or can use median
                             
         return parser.parse_args()
 
