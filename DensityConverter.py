@@ -31,7 +31,8 @@ def get_args():
                             'list of paths to the feature files you want to process, '
                             'separated by newlines')
                             parser.add_argument("-b", "--bin", type=str, default="Bins_for_density_0based.bed")
-                            parser.add_argument("-m", "--mode", type=str, default="mean") # or can use median
+                            parser.add_argument("-m", "--mode", type=str, default="mean", , help='the method of'
+                                                'selecting how to get the density value for the converted file') # or can use median
                             
         return parser.parse_args()
 
