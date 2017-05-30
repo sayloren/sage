@@ -83,7 +83,7 @@ def saveBedTool(btObject, strFilename):
 
 # 7 - save file from panda
 def savePanda(pdData, strFilename):
-    pdData.to_csv(strFilename, sep='\t', header=False, index=True)
+    pdData.to_csv(strFilename, sep='\t', header=False, index=False)
 
 def main():
     args = get_args()
