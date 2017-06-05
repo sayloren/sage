@@ -60,6 +60,7 @@ def intersectWindow(btWindows, btFeatures):
 # 3 - map density of your input feature files to the bins
 def mapWindow(btWindows,btFeatures,mode):
 	btMap = btWindows.map(btFeatures,c=4,o=mode)
+	return btMap
 
 # 4 - grab just columns for window coordinates and densities - depreciated; used in conjunction with intersect
 def cutToFraction(btIntersect):
@@ -103,7 +104,9 @@ def main():
 # 		btCutToFraction = cutToFraction(btMap)
 # 		pdFraction = bedtoolToPanda(btCutToFraction)
 # 		btMerge = mergeWindow(pdFraction)#,args.mode
-		savePanda(btMap, str('Density_for_matrix_{0}.bed'.format(filename)))
+		pdMap = bedtoolToPanda(btMap)
+		pdMap.replace('.',0.0,inplace=True)
+		savePanda(pdMap, str('Density_for_matrix_{0}.bed'.format(filename)))
 
 if __name__ == "__main__":
 	main()
