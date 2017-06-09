@@ -218,7 +218,6 @@ def methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh):
 	pdMeth = pd.concat(outMeth,axis=1)
 	return pdMeth, methTable
 
-
 # Threshold the uncapped coverage
 def methThreshold(methFeatures,methThresh):
 	pdmethFeatures = bedtoolToPanda(methFeatures)
@@ -277,6 +276,7 @@ def methMatch(sortMeth,rangeFeatures,num):
 	methCpGNeg, methTableNeg = collapseMethCpG(groupMeth,groupNegCpG,stringDF,num)
 	methTableNeg.columns = ['NegCContext','NegMethContext']
 	methTableNeg.index = methTableNeg.index.map(lambda x: reverseComplement(x))
+	methTableNeg.index = methTableNeg.index.str[::-1]
 	frames = [methTablePos,methTableNeg]
 	methTable = pd.concat(frames,axis=1)
 	methTable.fillna('0',inplace=True)
@@ -635,7 +635,7 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	sns.despine()
 	pp.savefig()
 	
-	gs = gridspec.GridSpec(3,2,height_ratios=[1,1,1])
+	gs = gridspec.GridSpec(3,4,height_ratios=[1,1,1])
 	gs.update(hspace=.5)
 	#unMethylatedCpGPos, MethylationWOCpGPos
 	# Those that are methylated
@@ -692,24 +692,48 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	# Table Methylation Contexts
 	#### This is going to have to be reworked to accomadate different cell types!!!
 # 	dfKruskal = pd.DataFrame(['{:0.2e}'.format(kruskalBoth[1]),'{:0.2e}'.format(kruskalUP[1]),'{:0.2e}'.format(kruskalDown[1])],index =['Up - Down','Up - UCE','Down - UCE'])
-	pdTable1 = (pdTable[pdTable.columns[pdTable.columns.str.contains('Pos',case=False)]])#pdTable.iloc[0:size,:]
-	pdTable2 = (pdTable[pdTable.columns[pdTable.columns.str.contains('Neg',case=False)]])#pdTable.iloc[size:len(pdTable),:]
+	pdTable1 = (pdTable[pdTable.columns[pdTable.columns.str.contains('PosCContext',case=False)]])#pdTable.iloc[0:size,:]
+	pdTable2 = (pdTable[pdTable.columns[pdTable.columns.str.contains('PosMethContext',case=False)]])#pdTable.iloc[size:len(pdTable),:]
+	pdTable3 = (pdTable[pdTable.columns[pdTable.columns.str.contains('NegCContext',case=False)]])
+	pdTable4 = (pdTable[pdTable.columns[pdTable.columns.str.contains('NegMethContext',case=False)]])
+# pdTable1['PerMeth'] = (pdTable1['CContextSum']/pdTable1['MethContextSum'])* 100
+
+	ax18i = plt.subplot(gs[2,0],sharex=ax0)
+	ax18i.set_frame_on(False)
+	ax18i.set_yticks([])
+	ax18i.set_xticks([])
+	ylabels3i = pdTable1.columns.str.replace('.bed_PosCContext','')
+	MethTable1 = ax18i.table(cellText=pdTable1.values,rowLabels=pdTable1.index,colLabels=ylabels3i,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
+	ax18i.set_title('Plus Strand C Context',size=8)
+	MethTable1.set_fontsize(6)
+
+	ax19i = plt.subplot(gs[2,1],sharex=ax0)
+	ax19i.set_frame_on(False)
+	ax19i.set_yticks([])
+	ax19i.set_xticks([])
+	ylabels4i = pdTable2.columns.str.replace('.bed_PosMethContext','')
+	MethTable2 = ax19i.table(cellText=pdTable2.values,rowLabels=pdTable2.index,colLabels=ylabels4i,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
+	ax19i.set_title('Plus Strand Methylation',size=8)
+	MethTable2.set_fontsize(6)
 	
+	ax18j = plt.subplot(gs[2,2],sharex=ax0)
+	ax18j.set_frame_on(False)
+	ax18j.set_yticks([])
+	ax18j.set_xticks([])
+	ylabels3j = pdTable3.columns.str.replace('.bed_NegCContext','')
+	MethTable3 = ax18j.table(cellText=pdTable3.values,rowLabels=pdTable3.index,colLabels=ylabels3j,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
+	ax18j.set_title('Minus Strand C Context',size=8)
+	MethTable3.set_fontsize(6)
 
+	ax19j = plt.subplot(gs[2,3],sharex=ax0)
+	ax19j.set_frame_on(False)
+	ax19j.set_yticks([])
+	ax19j.set_xticks([])
+	ylabels4j = pdTable4.columns.str.replace('.bed_NegMethContext','')
+	MethTable4 = ax19j.table(cellText=pdTable4.values,rowLabels=pdTable4.index,colLabels=ylabels4j,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
+	ax19j.set_title('Minus Strand Methylation',size=8)
+	MethTable4.set_fontsize(6)
 
-	ax18 = plt.subplot(gs[2,0],sharex=ax0)
-	ax18.set_frame_on(False)
-	ax18.set_yticks([])
-	ax18.set_xticks([])
-	MethTable = ax18.table(cellText=pdTable1.values,rowLabels=pdTable1.index,colLabels=pdTable1.columns,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
-	MethTable.set_fontsize(8)
-
-	ax19 = plt.subplot(gs[2,1],sharex=ax0)
-	ax19.set_frame_on(False)
-	ax19.set_yticks([])
-	ax19.set_xticks([])
-	MethTable = ax19.table(cellText=pdTable2.values,rowLabels=pdTable2.index,colLabels=pdTable2.columns,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
-	MethTable.set_fontsize(8)
 	#plt.set_title('Methylation Context Counts',size=8)
 
 	sns.despine()
