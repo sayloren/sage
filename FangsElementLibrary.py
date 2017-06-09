@@ -4,6 +4,7 @@ import argparse
 import Bio
 from Bio import SeqIO
 from Bio import Seq
+from bokeh.plotting import figure, output_file, show
 #from cruzdb import Genome
 import itertools
 import matplotlib as mpl
@@ -82,9 +83,6 @@ def btRange(rangeFeatures,faGenome):#,methFeature
 	rangeFeatures['combineString'] = rangeFeatures['combineString'].str.upper()
 	rangeFeatures['feature'] = rangeFeatures['feature'].str.upper()
 	rangeFeatures['reverseComplement'] = rangeFeatures.apply(lambda row: reverseComplement(row['combineString']),axis=1)
-# 	methPosition = methIntersect(rangeFeatures,methFeature)
-# 	outFeatures = pd.merge(rangeFeatures,methPosition,left_on='id',right_on='id',how='outer',indicator=True) #perhaps want to change indicator and how args
-# 	outFeatures['groupMeth'].fillna('[-999]',inplace=True) #,-999 have to trick into accepting a list, for iterating through later
 	return rangeFeatures
 
 # get the reverse complement
@@ -224,7 +222,6 @@ def methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh):
 # Threshold the uncapped coverage
 def methThreshold(methFeatures,methThresh):
 	pdmethFeatures = bedtoolToPanda(methFeatures)
-	#threshMeth = (concatMeth[(concatMeth['methPer'] >= 50)]) # subset for % methylation over 50
 	pdmethThresh = (pdmethFeatures[pdmethFeatures.loc[:,3] >= methThresh])
 	btmethThresh = pandaToBedtool(pdmethThresh)
 	return btmethThresh
@@ -357,7 +354,7 @@ def methylationFreq(methPosition,num): # concatMeth from methIntersect
 	return intMeth
 
 # make some graphs!
-def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,inuce,window):
+def graphOut(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,inuce,window):
 	fillX = range(0,(num-window))
 	halfwindow = ((window/2)+1)
 	sns.set_style('ticks')
@@ -640,7 +637,6 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	
 	gs = gridspec.GridSpec(3,2,height_ratios=[1,1,1])
 	gs.update(hspace=.5)
-	#unMethylatedCpGPos, MethylationWOCpGPos
 	# Those that are methylated
 	pdCpGPos = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('CpGMethylationPos',case=False)]])
 	pdCpGNeg = (pdMeth[pdMeth.columns[pdMeth.columns.str.contains('CpGMethylationNeg',case=False)]])
@@ -702,7 +698,7 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	pdTable4 = (pdTable[pdTable.columns[pdTable.columns.str.contains('NegMethContext',case=False)]])
 	pdTable3 = pdTable3[[0]]
 	pdTable3.columns = ['Count']
-	outTable = pd.concat([pdTable3,pdTable4],axis=1)
+	outTable2 = pd.concat([pdTable3,pdTable4],axis=1)
 # 	pdTable1['PerMeth'] = (pdTable1['CContextSum']/pdTable1['MethContextSum'])* 100
 
 	ax18 = plt.subplot(gs[2,0],sharex=ax0)
@@ -786,6 +782,14 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	pp.savefig()
 	pp.close()
 
+def bokehOut(pdWindow,fileName,num,uce,inuce,window):
+	fillX = range(0,(num-window))
+	mean = pdWindow.mean()
+	output_file('Fangs_{0}.html'.format(fileName))
+	p = figure()
+	p.line(fillX,mean,line_width=2)
+	show(p)
+
 # out put directionality, as inferred by comparing first and last n base pairs
 def compareN(element,size):
 	start = element[:size]
@@ -812,7 +816,7 @@ def dirLine(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
 		if len(dirStr.index) != 0:
 			dirWindow, dirWinCpG, dirWinA, dirWinT, dirWinG, dirWinC, dirWinMo = dataframeWindow(dirStr,num,uce,inuce,window)
 			pddirMeth, pddirTable = methPositions(mFiles,dirStr,num,uce,inuce,methThresh)
-			endLinegraphs(pddirMeth,pddirTable,dirWindow,dirWinCpG,dirWinA,dirWinT,dirWinG,dirWinC,dirWinMo,'{0}_30_{1}'.format(direction,fileName),num,uce,inuce,window)
+			graphOut(pddirMeth,pddirTable,dirWindow,dirWinCpG,dirWinA,dirWinT,dirWinG,dirWinC,dirWinMo,'{0}_30_{1}'.format(direction,fileName),num,uce,inuce,window)
 	negStr = (rangeFeatures[(rangeFeatures['compareBoundaries'] == '-')])
 	outComp, outCpG, compA, compT, compG, compC, compMo, outnegMeth, outnegTable  = [], [], [], [], [], [], [], [], []
 	for element in negStr['reverseComplement']:
@@ -869,7 +873,7 @@ def dirLine(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
 	pdcompMethNeg = (pdcompMeth[pdcompMeth.columns[pdcompMeth.columns.str.contains('CpGMethylationNeg',case=False)]])
 	pdgroupMethNeg = pdcompMethNeg.groupby(pdcompMethNeg.columns, axis=1).sum()
 	pdgroupMeth = pd.concat([pdgroupMethPer,pdgroupMethNum,pdgroupMethPos,pdgroupMethNeg],axis=1)
-	endLinegraphs(pdgroupMeth,pdgroupTable,compWindow,compWinCpG,compWinA,compWinT,compWinG,compWinC,compWinMo,'revComp_30_{0}'.format(fileName),num,uce,inuce,window)
+	graphOut(pdgroupMeth,pdgroupTable,compWindow,compWinCpG,compWinA,compWinT,compWinG,compWinC,compWinMo,'revComp_30_{0}'.format(fileName),num,uce,inuce,window)
 
 # save file from panda
 def savePanda(pdData, strFilename):
@@ -883,12 +887,12 @@ def perType(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
 		if len(boolType.index) != 0:
 			pdWindow, pdTypeCpG, pdTypeA, pdTypeT, pdTypeG, pdTypeC, pdTypeMo = dataframeWindow(boolType,num,uce,inuce,window)
 			pdMeth, pdTable = methPositions(mFiles,boolType,num,uce,inuce,methThresh)
-			endLinegraphs(pdMeth,pdTable,pdWindow,pdTypeCpG,pdTypeA,pdTypeT,pdTypeG,pdTypeC,pdTypeMo,'{0}_{1}'.format(type,fileName),num,uce,inuce,window)
+			graphOut(pdMeth,pdTable,pdWindow,pdTypeCpG,pdTypeA,pdTypeT,pdTypeG,pdTypeC,pdTypeMo,'{0}_{1}'.format(type,fileName),num,uce,inuce,window)
 			dirLine(boolType,'{0}_{1}'.format(type,fileName),mFiles,num,uce,inuce,window,methThresh)
 
 def main():
 	# Collect arguments
-	num = 600 # 600 # total size of region to look at (region + flanks), even number # suggested to be at least triple your element
+	num = 2200 # 600 # total size of region to look at (region + flanks), even number # suggested to be at least triple your element
 	uce = 200 # size of your element (region without flanks), even number
 	inuce = 50 # size into your element from the boundaries, even number, suggested 50
 	window = 11 # size of sliding window, odd number, suggested 11
@@ -906,7 +910,8 @@ def main():
 		rangeFeatures = btRange(subsetFeatures,faGenome)
 		pdWindow, pdCpG, pdA, pdT, pdG, pdC, pdMo = dataframeWindow(rangeFeatures,num,uce,inuce,window)
 		pdMeth, pdTable = methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh)
-		endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG,pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,inuce,window)
+		graphOut(pdMeth,pdTable,pdWindow,pdCpG,pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,inuce,window)
+		bokehOut(pdWindow,fileName,num,uce,inuce,window)
 # 		directionFeatures = evalN(rangeFeatures,fileName,binDir)
 # 		dirLine(directionFeatures,fileName,mFiles,num,uce,inuce,window,methThresh)
 # 		perType(directionFeatures,fileName,mFiles,num,uce,inuce,window,methThresh)
