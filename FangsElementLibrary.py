@@ -202,6 +202,7 @@ def behaviorUCE(fillX,pdWindow):
 # get methylation positions for all methylation files
 def methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh):
 	outMeth = []
+	outTable = []
 	for methName in mFiles:
 		methFeatures = eachFileProcess(methName)
 		pdmethThresh = methThreshold(methFeatures,methThresh)
@@ -212,11 +213,13 @@ def methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh):
 		pdmethFreq = methylationFreq(methPosition,num)
 		pdmethFreq.columns = ['{0}_Percentage'.format(methName),'{0}_Coverage'.format(methName),'{0}_Frequency'.format(methName)]
 		methTable.columns = ['{0}_PosCContext'.format(methName),'{0}_PosMethContext'.format(methName),'{0}_NegCContext'.format(methName),'{0}_NegMethContext'.format(methName)]
-		frames = [pdmethFreq,methCpGPos,methCpGNeg]
-		pdMethEx = pd.concat(frames,axis=1)
+		frames1 = [pdmethFreq,methCpGPos,methCpGNeg]
+		pdMethEx = pd.concat(frames1,axis=1)
 		outMeth.append(pdMethEx)
+		outTable.append(methTable)
 	pdMeth = pd.concat(outMeth,axis=1)
-	return pdMeth, methTable
+	pdTable = pd.concat(outTable,axis=1)
+	return pdMeth, pdTable
 
 # Threshold the uncapped coverage
 def methThreshold(methFeatures,methThresh):
@@ -635,7 +638,7 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	sns.despine()
 	pp.savefig()
 	
-	gs = gridspec.GridSpec(3,4,height_ratios=[1,1,1])
+	gs = gridspec.GridSpec(3,2,height_ratios=[1,1,1])
 	gs.update(hspace=.5)
 	#unMethylatedCpGPos, MethylationWOCpGPos
 	# Those that are methylated
@@ -687,54 +690,38 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	#cbar2.set_clim(vmin=0, vmax=100)
 
 	# Graphs of types and locations of different methylation contexts
-	# Sum methylation as a check - ax18
+	# Sum methylation as a check
 
 	# Table Methylation Contexts
-	#### This is going to have to be reworked to accomadate different cell types!!!
-# 	dfKruskal = pd.DataFrame(['{:0.2e}'.format(kruskalBoth[1]),'{:0.2e}'.format(kruskalUP[1]),'{:0.2e}'.format(kruskalDown[1])],index =['Up - Down','Up - UCE','Down - UCE'])
-	pdTable1 = (pdTable[pdTable.columns[pdTable.columns.str.contains('PosCContext',case=False)]])#pdTable.iloc[0:size,:]
-	pdTable2 = (pdTable[pdTable.columns[pdTable.columns.str.contains('PosMethContext',case=False)]])#pdTable.iloc[size:len(pdTable),:]
+	pdTable1 = (pdTable[pdTable.columns[pdTable.columns.str.contains('PosCContext',case=False)]])
+	pdTable2 = (pdTable[pdTable.columns[pdTable.columns.str.contains('PosMethContext',case=False)]])
+	pdTable1 = pdTable1[[0]]
+	pdTable1.columns = ['Count']
+	outTable1 = pd.concat([pdTable1,pdTable2],axis=1)
 	pdTable3 = (pdTable[pdTable.columns[pdTable.columns.str.contains('NegCContext',case=False)]])
 	pdTable4 = (pdTable[pdTable.columns[pdTable.columns.str.contains('NegMethContext',case=False)]])
-# pdTable1['PerMeth'] = (pdTable1['CContextSum']/pdTable1['MethContextSum'])* 100
+	pdTable3 = pdTable3[[0]]
+	pdTable3.columns = ['Count']
+	outTable = pd.concat([pdTable3,pdTable4],axis=1)
+# 	pdTable1['PerMeth'] = (pdTable1['CContextSum']/pdTable1['MethContextSum'])* 100
 
-	ax18i = plt.subplot(gs[2,0],sharex=ax0)
-	ax18i.set_frame_on(False)
-	ax18i.set_yticks([])
-	ax18i.set_xticks([])
-	ylabels3i = pdTable1.columns.str.replace('.bed_PosCContext','')
-	MethTable1 = ax18i.table(cellText=pdTable1.values,rowLabels=pdTable1.index,colLabels=ylabels3i,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
-	ax18i.set_title('Plus Strand C Context',size=8)
+	ax18 = plt.subplot(gs[2,0],sharex=ax0)
+	ax18.set_frame_on(False)
+	ax18.set_yticks([])
+	ax18.set_xticks([])
+	ylabels3 = outTable1.columns.str.replace('.bed_PosMethContext','')
+	MethTable1 = ax18.table(cellText=outTable1.values,rowLabels=outTable1.index,colLabels=ylabels3,cellLoc='center',rowLoc='center',loc='center')
+	ax18.set_title('Plus Strand Methylation',size=8)
 	MethTable1.set_fontsize(6)
 
-	ax19i = plt.subplot(gs[2,1],sharex=ax0)
-	ax19i.set_frame_on(False)
-	ax19i.set_yticks([])
-	ax19i.set_xticks([])
-	ylabels4i = pdTable2.columns.str.replace('.bed_PosMethContext','')
-	MethTable2 = ax19i.table(cellText=pdTable2.values,rowLabels=pdTable2.index,colLabels=ylabels4i,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
-	ax19i.set_title('Plus Strand Methylation',size=8)
+	ax19 = plt.subplot(gs[2,1],sharex=ax0)
+	ax19.set_frame_on(False)
+	ax19.set_yticks([])
+	ax19.set_xticks([])
+	ylabels4 = outTable2.columns.str.replace('.bed_NegMethContext','')
+	MethTable2 = ax19.table(cellText=outTable2.values,rowLabels=outTable2.index,colLabels=ylabels4,cellLoc='center',rowLoc='center',loc='center')
+	ax19.set_title('Minus Strand Methylation',size=8)
 	MethTable2.set_fontsize(6)
-	
-	ax18j = plt.subplot(gs[2,2],sharex=ax0)
-	ax18j.set_frame_on(False)
-	ax18j.set_yticks([])
-	ax18j.set_xticks([])
-	ylabels3j = pdTable3.columns.str.replace('.bed_NegCContext','')
-	MethTable3 = ax18j.table(cellText=pdTable3.values,rowLabels=pdTable3.index,colLabels=ylabels3j,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
-	ax18j.set_title('Minus Strand C Context',size=8)
-	MethTable3.set_fontsize(6)
-
-	ax19j = plt.subplot(gs[2,3],sharex=ax0)
-	ax19j.set_frame_on(False)
-	ax19j.set_yticks([])
-	ax19j.set_xticks([])
-	ylabels4j = pdTable4.columns.str.replace('.bed_NegMethContext','')
-	MethTable4 = ax19j.table(cellText=pdTable4.values,rowLabels=pdTable4.index,colLabels=ylabels4j,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
-	ax19j.set_title('Minus Strand Methylation',size=8)
-	MethTable4.set_fontsize(6)
-
-	#plt.set_title('Methylation Context Counts',size=8)
 
 	sns.despine()
 	pp.savefig()
@@ -752,8 +739,8 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	ax20.set_ylabel('Sample',size=8)
 	ax20.set_xlabel('Position',size=6)
 	ax20.tick_params(labelsize=8)
-	ylabels3 = TPer.index.str.replace('.bed_Percentage','')
-	ax20.set_yticklabels(ylabels3,minor=False)
+	ylabels5 = TPer.index.str.replace('.bed_Percentage','')
+	ax20.set_yticklabels(ylabels5,minor=False)
 	ax20.set_yticks(np.arange(TPer.shape[0]) + 0.5, minor=False)
 	ax20.set_title('Methylation Percentage over Base Pair Position',size=8)
 	cbar3 = plt.colorbar(mappable=heatmap3,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
@@ -769,8 +756,8 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	ax21.set_ylabel('Sample',size=8)
 	ax21.set_xlabel('Position',size=6)
 	ax21.tick_params(labelsize=8)
-	ylabels4 = TCov.index.str.replace('.bed_Coverage','')
-	ax21.set_yticklabels(ylabels4,minor=False)
+	ylabels6 = TCov.index.str.replace('.bed_Coverage','')
+	ax21.set_yticklabels(ylabels6,minor=False)
 	ax21.set_yticks(np.arange(TCov.shape[0]) + 0.5, minor=False)
 	ax21.set_title('Methylation Coverage over Base Pair Position',size=8)
 	cbar4 = plt.colorbar(mappable=heatmap4,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
@@ -788,8 +775,8 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	ax22.set_ylabel('Sample',size=8)
 	ax22.set_xlabel('Position',size=6)
 	ax22.tick_params(labelsize=8)
-	ylabels5 = TNum.index.str.replace('.bed_Frequency','')
-	ax22.set_yticklabels(ylabels5,minor=False)
+	ylabels7 = TNum.index.str.replace('.bed_Frequency','')
+	ax22.set_yticklabels(ylabels7,minor=False)
 	ax22.set_yticks(np.arange(TNum.shape[0]) + 0.5, minor=False)
 	ax22.set_title('Methylation Frequency over Base Pair Position',size=8)
 	cbar5 = plt.colorbar(mappable=heatmap5,orientation="vertical",shrink=.7,pad=0.072)#,label="% Methylation" ,anchor=(0.0, 0.5)
