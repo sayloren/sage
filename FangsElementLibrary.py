@@ -4,6 +4,7 @@ import argparse
 import Bio
 from Bio import SeqIO
 from Bio import Seq
+#from cruzdb import Genome
 import itertools
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -69,6 +70,28 @@ def getRange(btFeatures,fileName,num,uce,inuce):
 	rangeFeatures = midFeatures[['type','id','size','chr','sBoundary', 'start', 'sEdge', 'sCenter','eCenter','eEdge','end','eBoundary']] #,'starttwohund','endtwohund'
 	return rangeFeatures
 
+# get the strings for sliding window regions
+def btRange(rangeFeatures,faGenome):#,methFeature
+	rangeFeatures['sBoundarySeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','sBoundary','start']].values.tolist()),faGenome)
+	rangeFeatures['sEdgeSeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','start','sEdge']].values.tolist()),faGenome)
+	rangeFeatures['MiddleSeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','sCenter','eCenter']].values.tolist()),faGenome)
+	rangeFeatures['eEdgeSeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','eEdge','end',]].values.tolist()),faGenome)
+	rangeFeatures['eBoundarySeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','end','eBoundary']].values.tolist()),faGenome)
+	rangeFeatures['feature'] = simpleFasta(getFeatures(rangeFeatures[['chr','start','end']].values.tolist()),faGenome)
+	rangeFeatures['combineString'] = rangeFeatures['sBoundarySeq'].astype(str) + rangeFeatures['sEdgeSeq'].astype(str) + rangeFeatures['MiddleSeq'].astype(str) + rangeFeatures['eEdgeSeq'].astype(str) + rangeFeatures['eBoundarySeq'].astype(str)
+	rangeFeatures['combineString'] = rangeFeatures['combineString'].str.upper()
+	rangeFeatures['feature'] = rangeFeatures['feature'].str.upper()
+	rangeFeatures['reverseComplement'] = rangeFeatures.apply(lambda row: reverseComplement(row['combineString']),axis=1)
+# 	methPosition = methIntersect(rangeFeatures,methFeature)
+# 	outFeatures = pd.merge(rangeFeatures,methPosition,left_on='id',right_on='id',how='outer',indicator=True) #perhaps want to change indicator and how args
+# 	outFeatures['groupMeth'].fillna('[-999]',inplace=True) #,-999 have to trick into accepting a list, for iterating through later
+	return rangeFeatures
+
+# get the reverse complement
+def reverseComplement(sequence):
+	seqDict = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
+	return "".join([seqDict[base] for base in reversed(sequence)])
+
 # save file from bedtool
 def saveBedTool(btObject, strFilename):
 	btObject.saveas(strFilename)
@@ -85,6 +108,116 @@ def pandaToBedtool(panda): # columns 5+
 	arArFeatures = panda.values.tolist()
 	btoutFeatures = getFeatures(arArFeatures)
 	return btoutFeatures
+
+# get fasta strings for each desired region
+def getFasta(btFeatures,faGenome,fileName):
+	saveAll = 'Seq_result_for_all_{0}.txt'.format(fileName)
+	seqAll = btFeatures.sequence(fi=faGenome,fo=saveAll)
+	saveExonic = 'Seq_results_for_exonic_{0}.txt'.format(fileName)
+	seqExonic = btFeatures.sequence(fi=faGenome,fo=saveExonic).filter(lambda x: x[name] == 'exonic')
+	saveIntronic = 'Seq_results_for_intronic_{0}.txt'.format(fileName)
+	seqIntronic = btFeatures.sequence(fi=faGenome,fo=saveIntronic).filter(lambda x: x[name] == 'intronic')
+	saveIntergenic = 'Seq_results_for_intergenic_{0}.txt'.format(fileName)
+	seqIntergenic = btFeatures.sequence(fi=faGenome,fo=saveIntergenic).filter(lambda x: x[name] == 'intergenic')
+	return saveAll, saveExonic, saveIntronic, saveIntergenic
+
+# used in btRange to extract just the fasta strings
+def simpleFasta(inFeature,faGenome):
+	seqFeature = inFeature.sequence(fi=faGenome)
+	outFeature = pd.read_table(seqFeature.seqfn)
+	outSequence = outFeature[::2]
+	outSequence = outSequence.reset_index(drop=True)
+	return outSequence
+
+# run append to sliding window and return pandas data frames
+def dataframeWindow(rangeFeatures,num,uce,inuce,window):
+	outWindow, outCpG, outA, outT, outG, outC, outMo = appendWindow(rangeFeatures,num,uce,inuce,window)
+	pdWindow,pdCpG,pdA,pdT,pdG,pdC,pdMo = pd.DataFrame(outWindow),pd.DataFrame(outCpG),pd.DataFrame(outA),pd.DataFrame(outT),pd.DataFrame(outG),pd.DataFrame(outC),pd.DataFrame(outMo)
+	return pdWindow, pdCpG, pdA, pdT, pdG, pdC, pdMo
+
+# append results from sliding window
+def appendWindow(rangeFeatures,num,uce,inuce,window):
+	outWindow = []
+	outCpG = []
+	outA = []
+	outT = []
+	outG = []
+	outC = []
+	outMo = []
+	for element in rangeFeatures['combineString']:
+		outFeature, winCpG, winA, winT, winG, winC, winMo = slidingWindow(element,num,uce,inuce,window)
+		outWindow.append(outFeature)
+		outCpG.append(winCpG)
+		outA.append(winA)
+		outT.append(winT)
+		outG.append(winG)
+		outC.append(winC)
+		outMo.append(winMo)
+	return outWindow, outCpG, outA, outT, outG, outC, outMo
+
+# sliding window
+def slidingWindow(element,num,uce,inuce,window):
+	winFeatures = []
+	winCpG = []
+	winA = []
+	winT = []
+	winG = []
+	winC = []
+	winMotif = []
+	n = num #600 # len(element) # take out hard coding
+	start, end = 0, window
+	while end < n:
+		current = element[start:end]
+		#print num, float(len(element)), float(len(current)), start, end, current
+		percentageAT = eval('100 * float(current.count("A") + current.count("T"))/ float(len(current))')
+		percentageCpG = eval('100 * float(current.count("CG")) / float(len(current))')
+		perA = eval('100 * float(current.count("A"))/ float(len(current))')
+		perT = eval('100 * float(current.count("T"))/ float(len(current))')
+		perG = eval('100 * float(current.count("G"))/ float(len(current))')
+		perC = eval('100 * float(current.count("C"))/ float(len(current))')
+		perMo = eval('100 * float(current.count("ATTAAT")) / float(len(current))')
+		winFeatures.append(percentageAT)
+		winCpG.append(percentageCpG)
+		winA.append(perA)
+		winT.append(perT)
+		winG.append(perG)
+		winC.append(perC)
+		winMotif.append(perMo)
+		start, end = start + 1, end + 1
+	return winFeatures, winCpG, winA, winT, winG, winC, winMotif
+
+# Collect each UCEs second derivative
+def behaviorUCE(fillX,pdWindow):
+	secondderUCE = []
+	for index, row in pdWindow.iterrows():
+		f = splrep(fillX,row,k=5,s=11)
+		smoothMean = splev(fillX,f)
+		secondDer = splev(fillX,f,der=2)
+		secondDer[0:window] = 0 # small edge effect
+		secondDer[-window:] = 0 # small edge effect
+		secondderUCE.append(secondDer)
+	pdSecderUCE = pd.DataFrame(secondderUCE)
+	return pdSecderUCE
+
+# get methylation positions for all methylation files
+def methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh):
+	outMeth = []
+	for methName in mFiles:
+		methFeatures = eachFileProcess(methName)
+		pdmethThresh = methThreshold(methFeatures,methThresh)
+		methPosition = methIntersect(rangeFeatures,pdmethThresh,num,uce,inuce)
+		methCpGPos, methCpGNeg, methTable = methMatch(methPosition,rangeFeatures,num) # process the table...
+		methCpGPos.columns = ['{0}_CpGMethylationPos'.format(methName)]
+		methCpGNeg.columns = ['{0}_CpGMethylationNeg'.format(methName)]
+		pdmethFreq = methylationFreq(methPosition,num)
+		pdmethFreq.columns = ['{0}_Percentage'.format(methName),'{0}_Coverage'.format(methName),'{0}_Frequency'.format(methName)]
+		methTable.columns = ['{0}_PosCContext'.format(methName),'{0}_PosMethContext'.format(methName),'{0}_NegCContext'.format(methName),'{0}_NegMethContext'.format(methName)]
+		frames = [pdmethFreq,methCpGPos,methCpGNeg]
+		pdMethEx = pd.concat(frames,axis=1)
+		outMeth.append(pdMethEx)
+	pdMeth = pd.concat(outMeth,axis=1)
+	return pdMeth, methTable
+
 
 # Threshold the uncapped coverage
 def methThreshold(methFeatures,methThresh):
@@ -131,103 +264,23 @@ def methIntersect(rangeFeatures,methFeature,num,uce,inuce):
 	sortMeth = concatMeth.sort_values(['methLoc'],ascending=True)
 	return sortMeth
 
-# collect methylation frequencies by position of elements
-def methylationFreq(methPosition,num): # concatMeth from methIntersect
-	new_index = range(0,num)
-	subsetMeth = methPosition[['methLoc','methPer','methCov']]
-	subsetMeth['methFreq'] = subsetMeth.groupby(['methLoc'])['methPer'].transform('count')
-	dupMeth = subsetMeth.sort_values(['methLoc'],ascending=True).drop_duplicates(['methLoc','methFreq']) # returns highest value of methylation and coverage
-	methIndex = dupMeth.set_index('methLoc').reindex(new_index,fill_value=0)
-	methIndex.index.name = None
-	intMeth = methIndex.astype(int)
-	return intMeth
-
-# get methylation positions for all methylation files
-def methPositions(mFiles,rangeFeatures,num,uce,inuce,methThresh):
-	outMeth = []
-	for methName in mFiles:
-		methFeatures = eachFileProcess(methName)
-		pdmethThresh = methThreshold(methFeatures,methThresh)
-		methPosition = methIntersect(rangeFeatures,pdmethThresh,num,uce,inuce)
-		methCpGPos, methCpGNeg, methTable = methMatch(methPosition,rangeFeatures,num) # process the table...
-		methCpGPos.columns = ['{0}_CpGMethylationPos'.format(methName)]
-		methCpGNeg.columns = ['{0}_CpGMethylationNeg'.format(methName)]
-		pdmethFreq = methylationFreq(methPosition,num)
-		pdmethFreq.columns = ['{0}_Percentage'.format(methName),'{0}_Coverage'.format(methName),'{0}_Frequency'.format(methName)]
-		methTable.columns = ['{0}_PosCContext'.format(methName),'{0}_PosMethContext'.format(methName),'{0}_NegCContext'.format(methName),'{0}_NegMethContext'.format(methName)]
-		frames = [pdmethFreq,methCpGPos,methCpGNeg]
-		pdMethEx = pd.concat(frames,axis=1)
-		outMeth.append(pdMethEx)
-	pdMeth = pd.concat(outMeth,axis=1)
-	return pdMeth, methTable
-
-# get fasta strings for each desired region
-def getFasta(btFeatures,faGenome,fileName):
-	saveAll = 'Seq_result_for_all_{0}.txt'.format(fileName)
-	seqAll = btFeatures.sequence(fi=faGenome,fo=saveAll)
-	saveExonic = 'Seq_results_for_exonic_{0}.txt'.format(fileName)
-	seqExonic = btFeatures.sequence(fi=faGenome,fo=saveExonic).filter(lambda x: x[name] == 'exonic')
-	saveIntronic = 'Seq_results_for_intronic_{0}.txt'.format(fileName)
-	seqIntronic = btFeatures.sequence(fi=faGenome,fo=saveIntronic).filter(lambda x: x[name] == 'intronic')
-	saveIntergenic = 'Seq_results_for_intergenic_{0}.txt'.format(fileName)
-	seqIntergenic = btFeatures.sequence(fi=faGenome,fo=saveIntergenic).filter(lambda x: x[name] == 'intergenic')
-	return saveAll, saveExonic, saveIntronic, saveIntergenic
-
-# used in btRange to extract just the fasta strings
-def simpleFasta(inFeature,faGenome):
-	seqFeature = inFeature.sequence(fi=faGenome)
-	outFeature = pd.read_table(seqFeature.seqfn)
-	outSequence = outFeature[::2]
-	outSequence = outSequence.reset_index(drop=True)
-	return outSequence
-
-# get the strings for sliding window regions
-def btRange(rangeFeatures,faGenome):#,methFeature
-	rangeFeatures['sBoundarySeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','sBoundary','start']].values.tolist()),faGenome)
-	rangeFeatures['sEdgeSeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','start','sEdge']].values.tolist()),faGenome)
-	rangeFeatures['MiddleSeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','sCenter','eCenter']].values.tolist()),faGenome)
-	rangeFeatures['eEdgeSeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','eEdge','end',]].values.tolist()),faGenome)
-	rangeFeatures['eBoundarySeq'] = simpleFasta(getFeatures(rangeFeatures[['chr','end','eBoundary']].values.tolist()),faGenome)
-	rangeFeatures['feature'] = simpleFasta(getFeatures(rangeFeatures[['chr','start','end']].values.tolist()),faGenome)
-	rangeFeatures['combineString'] = rangeFeatures['sBoundarySeq'].astype(str) + rangeFeatures['sEdgeSeq'].astype(str) + rangeFeatures['MiddleSeq'].astype(str) + rangeFeatures['eEdgeSeq'].astype(str) + rangeFeatures['eBoundarySeq'].astype(str)
-	rangeFeatures['combineString'] = rangeFeatures['combineString'].str.upper()
-	rangeFeatures['feature'] = rangeFeatures['feature'].str.upper()
-	rangeFeatures['reverseComplement'] = rangeFeatures.apply(lambda row: reverseComplement(row['combineString']),axis=1)
-# 	methPosition = methIntersect(rangeFeatures,methFeature)
-# 	outFeatures = pd.merge(rangeFeatures,methPosition,left_on='id',right_on='id',how='outer',indicator=True) #perhaps want to change indicator and how args
-# 	outFeatures['groupMeth'].fillna('[-999]',inplace=True) #,-999 have to trick into accepting a list, for iterating through later
-	return rangeFeatures
-
-# sliding window
-def slidingWindow(element,num,uce,inuce,window):
-	winFeatures = []
-	winCpG = []
-	winA = []
-	winT = []
-	winG = []
-	winC = []
-	winMotif = []
-	n = num #600 # len(element) # take out hard coding
-	start, end = 0, window
-	while end < n:
-		current = element[start:end]
-		#print num, float(len(element)), float(len(current)), start, end, current
-		percentageAT = eval('100 * float(current.count("A") + current.count("T"))/ float(len(current))')
-		percentageCpG = eval('100 * float(current.count("CG")) / float(len(current))')
-		perA = eval('100 * float(current.count("A"))/ float(len(current))')
-		perT = eval('100 * float(current.count("T"))/ float(len(current))')
-		perG = eval('100 * float(current.count("G"))/ float(len(current))')
-		perC = eval('100 * float(current.count("C"))/ float(len(current))')
-		perMo = eval('100 * float(current.count("ATTAAT")) / float(len(current))')
-		winFeatures.append(percentageAT)
-		winCpG.append(percentageCpG)
-		winA.append(perA)
-		winT.append(perT)
-		winG.append(perG)
-		winC.append(perC)
-		winMotif.append(perMo)
-		start, end = start + 1, end + 1
-	return winFeatures, winCpG, winA, winT, winG, winC, winMotif
+# match cpg and methylation locations
+def methMatch(sortMeth,rangeFeatures,num):
+	stringDF = rangeFeatures[['id','combineString']]
+	groupMeth = methID(sortMeth)
+	groupMeth.set_index(keys='id',inplace=True,drop=True)
+	groupPosCpG = cpgWindow(stringDF,num,'C')
+	groupNegCpG = cpgWindow(stringDF,num,'G')
+	stringDF.set_index(keys='id',inplace=True,drop=True)
+	methCpGPos, methTablePos = collapseMethCpG(groupMeth,groupPosCpG,stringDF,num)
+	methTablePos.columns = ['PosCContext','PosMethContext']
+	methCpGNeg, methTableNeg = collapseMethCpG(groupMeth,groupNegCpG,stringDF,num)
+	methTableNeg.columns = ['NegCContext','NegMethContext']
+	methTableNeg.index = methTableNeg.index.map(lambda x: reverseComplement(x))
+	frames = [methTablePos,methTableNeg]
+	methTable = pd.concat(frames,axis=1)
+	methTable.fillna('0',inplace=True)
+	return methCpGPos, methCpGNeg, methTable
 
 # collect methylation locations by id
 def methID(sortMeth):
@@ -261,16 +314,16 @@ def collapseMethCpG(groupMeth,groupCpG,stringDF,num):
 	groupCat = pd.concat(frames,axis=1)
 	groupCat.fillna('',inplace=True)#[-1]
 	groupCat['groupOverlap'] = groupCat.apply(lambda row:[i for i in row['groupMeth'] if i  in row['groupCpG']],axis=1)
-	groupCat['contextCpG'] = groupCat.apply(lambda row: [row['combineString'][i-1:i+2] for i in row['groupCpG']],axis=1) # the cpgs at very start,
-	groupCat['contextOverlap'] = groupCat.apply(lambda row: [row['combineString'][i-1:i+2] for i in row['groupOverlap']],axis=1) # the cpgs at very start,
+	groupCat['contextCpG'] = groupCat.apply(lambda row: [row['combineString'][i:i+2] for i in row['groupCpG']],axis=1) # the cpgs at very start,i-1:i+2
+	groupCat['contextOverlap'] = groupCat.apply(lambda row: [row['combineString'][i:i+2] for i in row['groupOverlap']],axis=1) # the cpgs at very start,i-1:i+2
 # 	groupCat['methNoOv'] = groupCat.apply(lambda row: [sorted(set(row['groupMeth']) - set(row['groupCpG']))],axis=1)
 	Methylated = groupCat['groupOverlap'].apply(pd.Series).stack().tolist()
 	methCpG = methylatedCpGFreq(Methylated,num)
 	ContextCpG = groupCat['contextCpG'].apply(pd.Series).stack().tolist()
-	ContextCpG = filter(lambda s: len(s) > 2,ContextCpG) # cpgs at the end will be filtered out
+	ContextCpG = filter(lambda s: len(s) > 1,ContextCpG) # cpgs at the end will be filtered out, 2
 	contextCpGCount = pd.Series(ContextCpG).value_counts()
 	ContextOverlap = groupCat['contextOverlap'].apply(pd.Series).stack().tolist()
-	ContextOverlap = filter(lambda s: len(s) > 2, ContextOverlap) # cpgs at the end will be filtered out
+	ContextOverlap = filter(lambda s: len(s) > 1, ContextOverlap) # cpgs at the end will be filtered out,2
 	contextOverlapCount = pd.Series(ContextOverlap).value_counts()
 	frames = [contextCpGCount,contextOverlapCount]
 	contextTable = pd.concat(frames,axis=1)
@@ -289,62 +342,16 @@ def methylatedCpGFreq(Methylated,num): # concatMeth from methIntersect
 	methCpG = methIndex.astype(int)
 	return methCpG
 
-# match cpg and methylation locations
-def methMatch(sortMeth,rangeFeatures,num):
-	stringDF = rangeFeatures[['id','combineString']]
-	groupMeth = methID(sortMeth)
-	groupMeth.set_index(keys='id',inplace=True,drop=True)
-	groupPosCpG = cpgWindow(stringDF,num,'C')
-	groupNegCpG = cpgWindow(stringDF,num,'G')
-	stringDF.set_index(keys='id',inplace=True,drop=True)
-	methCpGPos, methTablePos = collapseMethCpG(groupMeth,groupPosCpG,stringDF,num)
-	methTablePos.columns = ['PosCContext','PosMethContext']
-	methCpGNeg, methTableNeg = collapseMethCpG(groupMeth,groupNegCpG,stringDF,num)
-	methTableNeg.columns = ['NegCContext','NegMethContext']
-	methTableNeg.index = methTableNeg.index.map(lambda x: reverseComplement(x))
-	frames = [methTablePos,methTableNeg]
-	methTable = pd.concat(frames,axis=1)
-	methTable.fillna('0',inplace=True)
-	return methCpGPos, methCpGNeg, methTable
-
-# append results from sliding window
-def appendWindow(rangeFeatures,num,uce,inuce,window):
-	outWindow = []
-	outCpG = []
-	outA = []
-	outT = []
-	outG = []
-	outC = []
-	outMo = []
-	for element in rangeFeatures['combineString']:
-		outFeature, winCpG, winA, winT, winG, winC, winMo = slidingWindow(element,num,uce,inuce,window)
-		outWindow.append(outFeature)
-		outCpG.append(winCpG)
-		outA.append(winA)
-		outT.append(winT)
-		outG.append(winG)
-		outC.append(winC)
-		outMo.append(winMo)
-	return outWindow, outCpG, outA, outT, outG, outC, outMo
-
-# run append to sliding window and return pandas data frames
-def dataframeWindow(rangeFeatures,num,uce,inuce,window):
-	outWindow, outCpG, outA, outT, outG, outC, outMo = appendWindow(rangeFeatures,num,uce,inuce,window)
-	pdWindow,pdCpG,pdA,pdT,pdG,pdC,pdMo = pd.DataFrame(outWindow),pd.DataFrame(outCpG),pd.DataFrame(outA),pd.DataFrame(outT),pd.DataFrame(outG),pd.DataFrame(outC),pd.DataFrame(outMo)
-	return pdWindow, pdCpG, pdA, pdT, pdG, pdC, pdMo
-
-# Collect each UCEs second derivative
-def behaviorUCE(fillX,pdWindow):
-	secondderUCE = []
-	for index, row in pdWindow.iterrows():
-		f = splrep(fillX,row,k=5,s=11)
-		smoothMean = splev(fillX,f)
-		secondDer = splev(fillX,f,der=2)
-		secondDer[0:window] = 0 # small edge effect
-		secondDer[-window:] = 0 # small edge effect
-		secondderUCE.append(secondDer)
-	pdSecderUCE = pd.DataFrame(secondderUCE)
-	return pdSecderUCE
+# collect methylation frequencies by position of elements
+def methylationFreq(methPosition,num): # concatMeth from methIntersect
+	new_index = range(0,num)
+	subsetMeth = methPosition[['methLoc','methPer','methCov']]
+	subsetMeth['methFreq'] = subsetMeth.groupby(['methLoc'])['methPer'].transform('count')
+	dupMeth = subsetMeth.sort_values(['methLoc'],ascending=True).drop_duplicates(['methLoc','methFreq']) # returns highest value of methylation and coverage
+	methIndex = dupMeth.set_index('methLoc').reindex(new_index,fill_value=0)
+	methIndex.index.name = None
+	intMeth = methIndex.astype(int)
+	return intMeth
 
 # make some graphs!
 def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,num,uce,inuce,window):
@@ -685,23 +692,24 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	# Table Methylation Contexts
 	#### This is going to have to be reworked to accomadate different cell types!!!
 # 	dfKruskal = pd.DataFrame(['{:0.2e}'.format(kruskalBoth[1]),'{:0.2e}'.format(kruskalUP[1]),'{:0.2e}'.format(kruskalDown[1])],index =['Up - Down','Up - UCE','Down - UCE'])
-	size = len(pdTable)/2
-	pdTable1 = pdTable.iloc[0:size,:]
-	pdTable2 = pdTable.iloc[size:len(pdTable),:]
+	pdTable1 = (pdTable[pdTable.columns[pdTable.columns.str.contains('Pos',case=False)]])#pdTable.iloc[0:size,:]
+	pdTable2 = (pdTable[pdTable.columns[pdTable.columns.str.contains('Neg',case=False)]])#pdTable.iloc[size:len(pdTable),:]
+	
+
 
 	ax18 = plt.subplot(gs[2,0],sharex=ax0)
 	ax18.set_frame_on(False)
 	ax18.set_yticks([])
 	ax18.set_xticks([])
 	MethTable = ax18.table(cellText=pdTable1.values,rowLabels=pdTable1.index,colLabels=pdTable1.columns,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
-	MethTable.set_fontsize(6)
+	MethTable.set_fontsize(8)
 
 	ax19 = plt.subplot(gs[2,1],sharex=ax0)
 	ax19.set_frame_on(False)
 	ax19.set_yticks([])
 	ax19.set_xticks([])
 	MethTable = ax19.table(cellText=pdTable2.values,rowLabels=pdTable2.index,colLabels=pdTable2.columns,cellLoc='center',rowLoc='center',loc='center',colWidths=[.25,.25,.25,.25])
-	MethTable.set_fontsize(6)
+	MethTable.set_fontsize(8)
 	#plt.set_title('Methylation Context Counts',size=8)
 
 	sns.despine()
@@ -767,10 +775,23 @@ def endLinegraphs(pdMeth,pdTable,pdWindow,pdCpG, pdA,pdT,pdG,pdC,pdMo,fileName,n
 	pp.savefig()
 	pp.close()
 
-# get the reverse complement
-def reverseComplement(sequence):
-	seqDict = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
-	return "".join([seqDict[base] for base in reversed(sequence)])
+# out put directionality, as inferred by comparing first and last n base pairs
+def compareN(element,size):
+	start = element[:size]
+	end = element[-size:]
+	perSize = []
+	perSize.append(eval('100*int(start.count("A") + start.count("a") + start.count("T") + start.count("t"))/len(start)'))
+	perSize.append(eval('100*int(end.count("A") + end.count("a") + end.count("T") + end.count("t"))/len(end)'))
+	if perSize[0] > perSize[1]: outList = '+'
+	if perSize[1] > perSize[0]: outList = '-'
+	if perSize[1] == perSize[0]: outList = '='
+	return outList
+
+# with the results from compareN per each element, evaluate directionality into new column
+def evalN(rangeFeatures,fileName,binDir):
+	rangeFeatures['compareBoundaries'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],binDir)),axis=1)
+	compareEnds = pd.DataFrame(rangeFeatures[['chr','start','end','compareBoundaries']])
+	return rangeFeatures
 
 # separate by directionality
 def dirLine(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
@@ -842,24 +863,6 @@ def dirLine(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
 # save file from panda
 def savePanda(pdData, strFilename):
 	pdData.to_csv(strFilename, sep='\t', header=True, index=True)
-
-# out put directionality, as inferred by comparing first and last n base pairs
-def compareN(element,size):
-	start = element[:size]
-	end = element[-size:]
-	perSize = []
-	perSize.append(eval('100*int(start.count("A") + start.count("a") + start.count("T") + start.count("t"))/len(start)'))
-	perSize.append(eval('100*int(end.count("A") + end.count("a") + end.count("T") + end.count("t"))/len(end)'))
-	if perSize[0] > perSize[1]: outList = '+'
-	if perSize[1] > perSize[0]: outList = '-'
-	if perSize[1] == perSize[0]: outList = '='
-	return outList
-
-# with the results from compareN per each element, evaluate directionality into new column
-def evalN(rangeFeatures,fileName,binDir):
-	rangeFeatures['compareBoundaries'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],binDir)),axis=1)
-	compareEnds = pd.DataFrame(rangeFeatures[['chr','start','end','compareBoundaries']])
-	return rangeFeatures
 
 # do all the analysis/plots for each type
 def perType(rangeFeatures,fileName,mFiles,num,uce,inuce,window,methThresh):
