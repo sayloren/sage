@@ -16,14 +16,20 @@ from bokeh.layouts import row, column
 from bokeh.layouts import widgetbox
 from bokeh.models.widgets import Select
 from bokeh.models.widgets import Toggle
-from numpy import sin, linspace, pi
+# from numpy import sin, linspace, pi
 import pandas as pd
 import seaborn as sns
 
-def bokehOut(pdWindow,fileName,num,uce,inuce,window):
+def bokehOut(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
 	fillX = range(0,(num-window))
-	source = ColumnDataSource(data=dict(x=fillX, mean=pdWindow.mean(axis=0), std=pdWindow.std(axis=0)))
-	output_file('Fangs_{0}.html'.format(fileName))
+	# Get mean and standard deviation for AT
+	ATNames = [names.index(i) for i in names if 'A' in i or 'T' in i]
+	ATDataFrames = [slidingWinDF[i] for i in ATNames]
+	ATconcat = pd.concat(ATDataFrames,axis=1)
+	ATgroup = ATconcat.groupby(ATconcat.columns,axis=1).sum()
+
+	source = ColumnDataSource(data=dict(x=fillX, mean=ATgroup.mean(), std=ATgroup.std()))
+	output_file('Interactive_{0}.html'.format(fileName))
 	p = figure(plot_width=1500, plot_height=600, min_border=10, min_border_left=50,toolbar_location="above",title="Mean AT Content Across Base Pair Position")
 	p.line('x','mean',line_width=2,color='#3e1638',source=source)
 	p.yaxis.axis_label = "% AT Content"
@@ -40,8 +46,8 @@ def bokehOut(pdWindow,fileName,num,uce,inuce,window):
 	widgets = row(select,toggle)
 	show(column(widgets,p,sd))
 
-def main(pdWindow,fileName,num,uce,inuce,window):
-	bokehOut(pdWindow,fileName,num,uce,inuce,window)
+def main(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
+	bokehOut(slidingWinDF,fileName,num,uce,inuce,window,nucLine)
 
 if __name__ == "__main__":
 	main()

@@ -5,27 +5,8 @@ Wren Saylor
 July 5 2017
 """
 import argparse
-import Bio
-from Bio import SeqIO
-from Bio import Seq
-from collections import defaultdict
-import itertools
-from numpy import sin, linspace, pi
-import numdifftools as nd
-import numpy as np
-import numpy.ma as ma
 import pandas as pd
-import pybedtools as pbt
-import re
-import scipy as sp
-import scipy.fftpack
-from scipy.interpolate import splrep, splev
-from scipy import signal as ssignal
-import scipy.stats as ss
-from scipy.stats import mstats
-import tempfile
-from MethylationLibrary import methPositions
-from FangsLibrary import dataframeWindow
+import BinLibrary
 
 # out put directionality, as inferred by comparing first and last n base pairs from input parameters
 def compareN(element,size):
@@ -44,6 +25,7 @@ def compareN(element,size):
 def evalN(rangeFeatures,fileName,binDir):
 	rangeFeatures['compareBoundaries'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],binDir)),axis=1)
 	compareEnds = pd.DataFrame(rangeFeatures[['chr','start','end','compareBoundaries']])
+	# put bin size calibration here
 	return rangeFeatures
 
 def main(rangeFeatures,fileName,binDir):

@@ -1,95 +1,54 @@
 """"""
 
 import argparse
-import Bio
-from Bio import SeqIO
-from Bio import Seq
-from collections import defaultdict
-import itertools
-from numpy import sin, linspace, pi
-import numdifftools as nd
-import numpy as np
-import numpy.ma as ma
 import pandas as pd
-import pybedtools as pbt
-import re
-import tempfile
 
-# run append to sliding window and return pandas data frames
-def dataframeWindow(rangeFeatures,num,uce,inuce,window):
-	outWindow,outCpA,outCpT,outCpG,outCpC,outA,outT,outG,outC, outMo = appendWindow(rangeFeatures,num,uce,inuce,window)
-	pdWindow,pdCpA,pdCpT,pdCpG,pdCpC,pdA,pdT,pdG,pdC,pdMo = pd.DataFrame(outWindow),pd.DataFrame(outCpA),pd.DataFrame(outCpT),pd.DataFrame(outCpG),pd.DataFrame(outCpC),pd.DataFrame(outA),pd.DataFrame(outT),pd.DataFrame(outG),pd.DataFrame(outC),pd.DataFrame(outMo)
-	return pdWindow, pdCpA, pdCpT,pdCpG,pdCpC, pdA, pdT, pdG, pdC, pdMo
+# run the sliding window for each nucleotide string
+def compactWindow(features,label,num,uce,inuce,window,searchList):
+	outCollect = []
+	for element,id in zip(features,label):#rangeFeatures['combineString'],rangeFeatures['id']
+		outElement = {id: []}
+		outList = {key:[] for key in searchList}
+		n = num
+		s = 1 # size to jump for sliding window
+		start, end = 0, window
+		while end < n:
+			current = element[start:end]
+			for key in searchList:
+				percentage = eval('100*float(current.count(key))/float(len(current))')
+				outList[key].append(percentage)
+			start, end = start + s, end + s
+		outElement[id].append(outList)
+		outCollect.append(outElement)
+	outFlatten = flattenWindow(outCollect)
+	outDataFrame, names = dfWindow(outFlatten)
+	return outDataFrame, names
 
-# append results from sliding window
-def appendWindow(rangeFeatures,num,uce,inuce,window):
-	outWindow = []
-	outCpA = []
-	outCpT = []
-	outCpG = []
-	outCpC = []
-	outA = []
-	outT = []
-	outG = []
-	outC = []
-	outMo = []
-	for element in rangeFeatures['combineString']:
-		outFeature, winCpA, winCpT, winCpG, winCpC, winA, winT, winG, winC, winMo = slidingWindow(element,num,uce,inuce,window)
-		outWindow.append(outFeature)
-		outCpA.append(winCpA)
-		outCpT.append(winCpT)
-		outCpG.append(winCpG)
-		outCpC.append(winCpC)
-		outA.append(winA)
-		outT.append(winT)
-		outG.append(winG)
-		outC.append(winC)
-		outMo.append(winMo)
-	return outWindow, outCpA, outCpT, outCpG, outCpC, outA, outT, outG, outC, outMo
+# convert to a data frame with a list for each element x nucleotide string
+def flattenWindow(outCollect):
+	outFlatten = pd.DataFrame()
+	outIndex = []
+	for d in outCollect:
+		for k,v in d.items():
+			outFlatten = outFlatten.append(v,ignore_index=True)
+			outIndex.append(k)
+	outFlatten.index = outIndex
+	return outFlatten
 
-# sliding window
-def slidingWindow(element,num,uce,inuce,window):
-	winFeatures = []
-	winCpA = []
-	winCpT = []
-	winCpG = []
-	winCpC = []
-	winA = []
-	winT = []
-	winG = []
-	winC = []
-	winMotif = []
-	n = num #600 # len(element) # take out hard coding
-	start, end = 0, window
-	while end < n:
-		current = element[start:end]
-		#print num, float(len(element)), float(len(current)), start, end, current
-		percentageAT = eval('100 * float(current.count("A") + current.count("T"))/ float(len(current))')
-		percentageCpA = eval('100 * float(current.count("CA")) / float(len(current))')
-		percentageCpT = eval('100 * float(current.count("CT")) / float(len(current))')
-		percentageCpG = eval('100 * float(current.count("CG")) / float(len(current))')
-		percentageCpC = eval('100 * float(current.count("CC")) / float(len(current))')
-		perA = eval('100 * float(current.count("A"))/ float(len(current))')
-		perT = eval('100 * float(current.count("T"))/ float(len(current))')
-		perG = eval('100 * float(current.count("G"))/ float(len(current))')
-		perC = eval('100 * float(current.count("C"))/ float(len(current))')
-		perMo = eval('100 * float(current.count("ATTAAT")) / float(len(current))')
-		winFeatures.append(percentageAT)
-		winCpA.append(percentageCpA)
-		winCpT.append(percentageCpT)
-		winCpG.append(percentageCpG)
-		winCpC.append(percentageCpC)
-		winA.append(perA)
-		winT.append(perT)
-		winG.append(perG)
-		winC.append(perC)
-		winMotif.append(perMo)
-		start, end = start + 1, end + 1
-	return winFeatures, winCpA, winCpT, winCpG, winCpC, winA, winT, winG, winC, winMotif
+# turn each list of element x nucleotide string into a separate df, within a larger df
+def dfWindow(outDataFrame):
+	names = outDataFrame.columns.tolist()
+	collectNucDF = []
+	for nuc in names:
+		nuc = outDataFrame[[nuc]]
+		nuc.columns = ['temp']
+		split = pd.DataFrame(nuc['temp'].values.tolist(),index=nuc.index)
+		collectNucDF.append(split)
+	return collectNucDF, names
 
-def main(rangeFeatures,num,uce,inuce,window):
-	pdWindow, pdCpA, pdCpT, pdCpG, pdCpC, pdA, pdT, pdG, pdC, pdMo = dataframeWindow(rangeFeatures,num,uce,inuce,window)
-	return pdWindow, pdCpA, pdCpT, pdCpG, pdCpC, pdA, pdT, pdG, pdC, pdMo 
-	
+def main(features,label,num,uce,inuce,window,nucLine):
+	outDataFrame, names = compactWindow(features,label,num,uce,inuce,window,nucLine)
+	return outDataFrame, names
+
 if __name__ == "__main__":
 	main()

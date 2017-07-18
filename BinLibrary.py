@@ -9,7 +9,6 @@ June 20 2017
 """
 
 import argparse
-import itertools
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import numpy as np

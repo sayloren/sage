@@ -6,20 +6,9 @@ July 5 2017
 """
 
 import argparse
-import Bio
-from Bio import SeqIO
-from Bio import Seq
 from collections import defaultdict
-import itertools
-from numpy import sin, linspace, pi
-import numdifftools as nd
-import numpy as np
-import numpy.ma as ma
 import pandas as pd
 import pybedtools as pbt
-import re
-import scipy as sp
-import tempfile
 
 # read in files
 def eachFileProcess(fileName):
@@ -37,19 +26,19 @@ def getRange(btFeatures,fileName,num,uce,inuce):
 	inregion = uce-(inuce*2)
 	midFeatures = pd.read_table(btFeatures.fn, header=None)
 	midFeatures['middle'] = midFeatures.loc[:,1:2].mean(axis=1).astype(int)
+	midFeatures['start'] = midFeatures.loc[:,1]
+	midFeatures['end'] = midFeatures.loc[:,2] 
 	midFeatures['sCenter'] = midFeatures['middle'] - (inregion/2)
 	midFeatures['eCenter'] = midFeatures['middle'] + (inregion/2)
 	midFeatures['sEdge'] = midFeatures.loc[:,1] + inuce
 	midFeatures['eEdge'] = midFeatures.loc[:,2] - inuce
 	midFeatures['sBoundary'] = midFeatures.loc[:,1] - flankSize
 	midFeatures['eBoundary'] = midFeatures.loc[:,2] + flankSize
-	midFeatures['start'] = midFeatures.loc[:,1]
-	midFeatures['end'] = midFeatures.loc[:,2]
 	midFeatures['type'] = midFeatures.loc[:,4]
 	midFeatures['id'] = midFeatures.loc[:,3]
 	midFeatures['chr'] = midFeatures.loc[:,0]
 	midFeatures['size'] = midFeatures.loc[:,2].astype(int)-midFeatures.loc[:,1].astype(int)
-	rangeFeatures = midFeatures[['type','id','size','chr','sBoundary', 'start', 'sEdge', 'sCenter','eCenter','eEdge','end','eBoundary']] #,'starttwohund','endtwohund'
+	rangeFeatures = midFeatures[['type','id','size','chr','sBoundary','start','sEdge','sCenter','eCenter','eEdge','end','eBoundary']]
 	return rangeFeatures
 
 # get the strings for sliding window regions
@@ -110,7 +99,7 @@ def simpleFasta(inFeature,faGenome):
 
 def main(num,uce,inuce,window,binDir,fileName,sizeGenome,faGenome):
 	btFeatures = eachFileProcess(fileName)
-	subsetFeatures = getRange(btFeatures, fileName,num,uce,inuce)
+	subsetFeatures = getRange(btFeatures,fileName,num,uce,inuce)
 	rangeFeatures = btRange(subsetFeatures,faGenome)
 	return rangeFeatures
 

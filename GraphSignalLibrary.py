@@ -15,10 +15,10 @@ import matplotlib.pyplot as plt
 from numpy import sin, linspace, pi
 import numdifftools as nd
 import numpy as np
-import numpy.ma as ma
+# import numpy.ma as ma
 import pandas as pd
-import pybedtools as pbt
-import re
+# import pybedtools as pbt
+# import re
 import scipy as sp
 import scipy.fftpack
 from scipy.interpolate import splrep, splev
@@ -28,23 +28,34 @@ from scipy.stats import mstats
 import seaborn as sns
 
 # make some graphs!
-def graphFang(pdWindow,fileName,num,uce,inuce,window):
+def graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
+	
+	# Parameters used thougout
 	fillX = range(0,(num-window))
 	halfwindow = ((window/2)+1)
+	
+	# Plot settings
 	sns.set_style('ticks')
 	gs = gridspec.GridSpec(3,1,height_ratios=[3,1,1]) # for the ratios of the graphs against each other
 	gs.update(hspace=.8) # setting the space between the graphs
 	info = str(fileName) + ', '+ str(len(pdWindow)) + ' - ' "UCES"
 	plt.suptitle(info,fontsize=10)
-	mean = pdWindow.mean()
-	#maX = np.ma.masked_where(240<fillX<250 & 340<fillX<350, fillX) # tried to make a mast for gapped data
+
+	# Get mean for AT
+	ATNames = [names.index(i) for i in names if 'A' in i or 'T' in i]
+	ATDataFrames = [slidingWinDF[i] for i in ATNames]
+	ATconcat = pd.concat(ATDataFrames,axis=1)
+	ATgroup = ATconcat.groupby(ATconcat.columns,axis=1).sum()
+	ATmean = ATgroup.mean()
+
+	# Filename
 	pp = PdfPages('Signal_{0}.pdf'.format(fileName))
 
 	gs = gridspec.GridSpec(3,3,height_ratios=[1,1,1])
 	gs.update(hspace=.65)
 
 	# Create fitted, first and second derivative lines
-	f = splrep(fillX,pdWindow.mean(axis=0),k=5,s=11)
+	f = splrep(fillX,ATmean,k=5,s=11)
 	smoothMean = splev(fillX,f)
 	firstDer = splev(fillX,f,der=1)
 	firstDer[0:halfwindow] = 0 # small edge effect
@@ -100,10 +111,10 @@ def graphFang(pdWindow,fileName,num,uce,inuce,window):
 	ax7 = plt.subplot(gs[0,:],sharex=ax4)
 	f1, t1, Zxx1 = ssignal.stft(firstDer,fs=1.0, window='hann',nperseg=30,noverlap=None)#,nperseg=11,noverlap=5
 	ax7.pcolormesh(t1,f1,np.abs(Zxx1),cmap='RdPu')
-	ax7.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#5fc85b') # 245
-	ax7.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#5fc85b') # 345
-	ax7.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#96c85b') # 195
-	ax7.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#96c85b') # 395
+	ax7.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#5fc85b')
+	ax7.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#5fc85b')
+	ax7.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#96c85b')
+	ax7.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#96c85b')
 	ax7.set_ylabel('Frequency',size=8)
 	ax7.set_xlabel('Position',size=6)
 	ax7.set_yticks(ax7.get_yticks()[::2])
@@ -116,9 +127,9 @@ def graphFang(pdWindow,fileName,num,uce,inuce,window):
 	ax8.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
 	ax8.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
 	ax8.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
-	ax8.axvspan((((num-uce)/2)-halfwindow),(((num-uce)/2)+uce-halfwindow),facecolor = '#ae3e9e',label='',alpha=0.1) # (((num-uce)/2)+(inuce-halfwindow)),(((num-uce)/2)+(uce-inuce-halfwindow)) 245, 345
-	ax8.axvspan(window,(((num-uce)/2)-halfwindow),facecolor = '#863eae',label='',alpha=0.1) #inuce,(((num-uce)/2)-inuce) 50, 150
-	ax8.axvspan((((num-uce)/2)+uce-halfwindow),(num-window-window),facecolor = '#ae3e66',label='',alpha=0.1) # (num-window-(((num-uce)/2)-inuce)),(num-window-inuce) 439,539
+	ax8.axvspan((((num-uce)/2)-halfwindow),(((num-uce)/2)+uce-halfwindow),facecolor = '#ae3e9e',label='',alpha=0.1)
+	ax8.axvspan(window,(((num-uce)/2)-halfwindow),facecolor = '#863eae',label='',alpha=0.1)
+	ax8.axvspan((((num-uce)/2)+uce-halfwindow),(num-window-window),facecolor = '#ae3e66',label='',alpha=0.1)
 	ax8.set_yticks(ax8.get_yticks()[::2])
 	ax8.set_xlabel('Position',size=6)
 	ax8.set_ylabel('Amplitude',size=8)
@@ -126,7 +137,7 @@ def graphFang(pdWindow,fileName,num,uce,inuce,window):
 	
 	Fs = 1.0 # sampling rate
 	Ts = 1.0/Fs # sampling interval
-	y2sd = firstDer[(((num-uce)/2)-halfwindow):(((num-uce)/2)+uce-halfwindow)]#firstDer[(((num-uce)/2)+(inuce-halfwindow)):(((num-uce)/2)+(uce-inuce-halfwindow))] # 245, 345
+	y2sd = firstDer[(((num-uce)/2)-halfwindow):(((num-uce)/2)+uce-halfwindow)]
 	n2sd = len(y2sd) # length of the signal
 	k2sd = np.arange(n2sd)
 	T2sd = n2sd/Fs
@@ -134,7 +145,7 @@ def graphFang(pdWindow,fileName,num,uce,inuce,window):
 	frq2sd = frq2sd[range(n2sd/2)] # one side frequncy range
 	Y2sd = np.fft.fft(y2sd)/n2sd # fft computing and normalization
 	Y2sd = Y2sd[range(n2sd/2)]
-	y3sd = firstDer[window:(((num-uce)/2)-halfwindow)]#firstDer[inuce:(((num-uce)/2)-inuce)] # 50, 150
+	y3sd = firstDer[window:(((num-uce)/2)-halfwindow)]
 	n3sd = len(y3sd)
 	k3sd = np.arange(n3sd)
 	T3sd = n3sd/Fs
@@ -142,7 +153,7 @@ def graphFang(pdWindow,fileName,num,uce,inuce,window):
 	frq3sd = frq3sd[range(n3sd/2)]
 	Y3sd = np.fft.fft(y3sd)/n3sd
 	Y3sd = Y3sd[range(n3sd/2)]
-	y4sd = firstDer[(((num-uce)/2)+uce-halfwindow):(num-window-window)]#firstDer[(num-window-(((num-uce)/2)-inuce)):(num-window-inuce)]#439,539
+	y4sd = firstDer[(((num-uce)/2)+uce-halfwindow):(num-window-window)]
 	n4sd = len(y4sd)
 	k4sd = np.arange(n4sd)
 	T4sd = n4sd/Fs
@@ -173,8 +184,8 @@ def graphFang(pdWindow,fileName,num,uce,inuce,window):
 	pp.savefig()
 	pp.close()
 
-def main(pdWindow,fileName,num,uce,inuce,window):
-	graphFang(pdWindow,fileName,num,uce,inuce,window)
+def main(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
+	graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine)
 	
 if __name__ == "__main__":
 	main()
