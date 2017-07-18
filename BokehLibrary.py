@@ -20,6 +20,7 @@ from bokeh.models.widgets import Toggle
 import pandas as pd
 import seaborn as sns
 
+# Make interactive plots
 def bokehOut(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
 	fillX = range(0,(num-window))
 	# Get mean and standard deviation for AT

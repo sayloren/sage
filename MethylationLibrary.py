@@ -26,6 +26,7 @@ from ElementLibrary import simpleFasta
 # 	df['dictionary'] = df.apply(lambda row: [dict(zip(row['group1'],row['group2']))],axis=1) # make a list a dictionary for another list in column
 # 	List = df['list'].apply(pd.Series).stack().tolist() # make a list from a column of lists
 
+# Threshold methylation data by coverage and percentage
 def methThreshold(methFeatures,methCovThresh,methPerThresh):
 	pdmethFeatures = bedtoolToPanda(methFeatures)
 	pdmethCovThresh = (pdmethFeatures[pdmethFeatures.loc[:,3] >= methCovThresh])
@@ -34,6 +35,7 @@ def methThreshold(methFeatures,methCovThresh,methPerThresh):
 	print 'Methylation coverage is being thresholded at {0} and percentage at {1}'.format(methCovThresh, methPerThresh)
 	return btmethThresh
 
+# Intersect regions from the methylation data with element regions
 def methIntersect(rangeFeatures,methFeature,num,uce,inuce,faGenome):
 	methSBoundary = methFeature.intersect(rangeFeatures[['chr','sBoundary','sEdge','id']].values.tolist(),wb=True,wa=True)
 	if len(methSBoundary) != 0:
@@ -92,6 +94,7 @@ def methIntersect(rangeFeatures,methFeature,num,uce,inuce,faGenome):
 	sortMeth = concatMeth.sort_values(['methLoc'],ascending=True)
 	return sortMeth
 
+# Run the analysis to extract percentage, frequency, coverage, location, context, and direction
 def compactMeth(mFiles,rangeFeatures,num,uce,inuce,methCovThresh,methPerThresh,faGenome):
 	outMeth = []
 	for methName in mFiles:

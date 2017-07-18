@@ -15,10 +15,7 @@ import matplotlib.pyplot as plt
 from numpy import sin, linspace, pi
 import numdifftools as nd
 import numpy as np
-# import numpy.ma as ma
 import pandas as pd
-# import pybedtools as pbt
-# import re
 import scipy as sp
 import scipy.fftpack
 from scipy.interpolate import splrep, splev
@@ -27,7 +24,7 @@ import scipy.stats as ss
 from scipy.stats import mstats
 import seaborn as sns
 
-# make some graphs!
+# Make signal graphs
 def graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
 	
 	# Parameters used thougout

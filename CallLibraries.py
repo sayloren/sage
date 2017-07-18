@@ -67,8 +67,8 @@ def groupSeparate(List,directionFeatures,typecolumn,fileName,binDir,mFiles,num,u
 
 	# if there is nothing in that set, skip
 	if len(bool.index) != 0:
-		Meth,Table,Window,Names = TypeLibrary.main(bool,fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-	return bool,Meth,Table,Window,Names
+		Meth,Window,Names = TypeLibrary.main(bool,fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
+	return bool,Meth,Window,Names
 
 # the plotting options, if in the list of plot flags, run graph
 def plotGraphs(pdMeth,slidingWinDF,names,fileName,num,uce,inuce,window,graphs,nucLine,base,combinations):

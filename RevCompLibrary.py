@@ -10,9 +10,7 @@ from FangsLibrary import compactWindow
 from ElementLibrary import eachFileProcess
 from MethylationLibrary import compactMeth
 
-def savePanda(pdData, strFilename):
-	pdData.to_csv(strFilename, sep='\t', header=True, index=True)
-
+# Methylation RCsorting
 def methDirection(negStr,posStr,mFiles,num,uce,inuce,methCovThresh,methPerThresh,faGenome):
 
 	posMeth = compactMeth(mFiles,posStr,num,uce,inuce,methCovThresh,methPerThresh,faGenome)
@@ -44,6 +42,7 @@ def methDirection(negStr,posStr,mFiles,num,uce,inuce,methCovThresh,methPerThresh
 
 	return outMerge
 
+# Sliding window RCsorting
 def slideDirection(negStr,posStr,num,uce,inuce,window,nucLine):
 	negDF, negNames = compactWindow(negStr['reverseComplement'],negStr['id'],num,uce,inuce,window,nucLine)
 	posDF, posNames = compactWindow(posStr['combineString'],posStr['id'],num,uce,inuce,window,nucLine)
@@ -54,6 +53,7 @@ def slideDirection(negStr,posStr,num,uce,inuce,window,nucLine):
 		compWindow.append(tempGroup)
 	return compWindow, negNames # or could be posNames, they will be the same
 
+# Separate on plus and minus orientation, RCsort and return methylation and sliding window computations
 def dirLine(directionFeatures,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome):
 	negStr = (directionFeatures[(directionFeatures['compareBoundaries'] == '-')])
 	posStr = (directionFeatures[(directionFeatures['compareBoundaries'] == '+')])

@@ -18,19 +18,8 @@ from matplotlib.colors import ListedColormap
 import matplotlib.gridspec as gridspec
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-# from numpy import sin, linspace, pi
-# import numdifftools as nd
 import numpy as np
-# import numpy.ma as ma
 import pandas as pd
-# import pybedtools as pbt
-# import re
-# import scipy as sp
-# import scipy.fftpack
-# from scipy.interpolate import splrep, splev
-# from scipy import signal as ssignal
-# import scipy.stats as ss
-# from scipy.stats import mstats
 import seaborn as sns
 from GraphMethLibrary import methIndex
 

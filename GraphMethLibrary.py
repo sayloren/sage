@@ -26,6 +26,7 @@ import pandas as pd
 # from scipy.stats import mstats
 import seaborn as sns
 
+# Transform the Frequency, Percentage and Coverage data into graphable data frames
 def methIndex(dataframe,yItem,zItem,num): 
 	# x item is methLoc, y item is either tissue or id, z item is coverage, percentage, or frequency
 	new_index = range(0,num)
