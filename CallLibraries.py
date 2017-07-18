@@ -7,6 +7,8 @@ July 5 2017
 To Do:
 Print output graphs to new folder
 Have input methylation data in separate callable folder
+If no methylation plotting, don't process methylation
+Add verbose as a setting to args
 
 """
 
@@ -57,6 +59,8 @@ def get_args():
 	parser.add_argument('-rc', "--reversecomplement",action='store_true', help='if reverse complement sorting required')
 	parser.add_argument('-p',"--plots",default=[],nargs='*',choices=['fangs','methylation','signal','interactive','cluster'],help='the available graphs to plot') # 'table', 'combinations'
 	parser.add_argument('-nuc',"--nucleotideline",default=['A','T'],nargs='+',help='type the nucleotide string combinations to search for in the element')#'CA','CT','CC','CG'
+	parser.add_argument('-str',"--stringname",type=str,help='string to add to the outfile name')
+# 	parser.add_argument('-v',"--verbose",help='print statements')
 	return parser.parse_args()
 
 # for type and direction, separate the groups and run the analyses
@@ -91,7 +95,7 @@ def main():
 	# Collect arguments
 	args = get_args()
 	
-	#integer parameters
+	# Integer parameters
 	num = args.total
 	uce = args.element
 	inuce = args.inset
@@ -100,28 +104,31 @@ def main():
 	methCovThresh = args.thresholdcoverage
 	methPerThresh = args.thresholdpercentage
 
-	#arguments for the = bin calibration
+	# Arguments for the = bin calibration
 	base = args.base
 	combinations = args.combinations
 
-	#element and methylation files
+	# Element and methylation files
 	eFiles = [line.strip() for line in args.efile]
 	mFiles = [line.strip() for line in args.mfile]
 
-	#genome files from UCSC
+	# Genome files from UCSC
 	sizeGenome = args.genome
 	faGenome = args.fasta
 
-	#lists with the types and directions to use
+	# Lists with the types and directions to use
 	typeList = args.elementype
 	dirList = args.elementdirection
 	nucLine = args.nucleotideline
 
-	# reverse complement argument
+	# Reverse complement argument
 	revCom = args.reversecomplement
 
-	# which plots to run
+	# Which plots to run
 	graphs = args.plots
+
+	# A string to add to the out file name in case you want to set up runs and let be
+	stringName = args.stringname
 
 	# for each element file provided
 	for fileName in eFiles:
@@ -135,26 +142,26 @@ def main():
 			typeList.remove('all')
 			allWindow, allNames = FangsLibrary.main(rangeFeatures['combineString'],rangeFeatures['id'],num,uce,inuce,window,nucLine)
 			pdMeth = MethylationLibrary.main(mFiles,rangeFeatures,num,uce,inuce,methCovThresh,methPerThresh,faGenome)
-			plotGraphs(pdMeth,allWindow,allNames,'{0}_{1}_{2}'.format('all',binDir,fileName),num,uce,inuce,window,graphs,nucLine,base,combinations)
+			plotGraphs(pdMeth,allWindow,allNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format('all',uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations)
 			if revCom:
 				revMeth,revWindow,revNames = RevCompLibrary.main(directionFeatures,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-				plotGraphs(revMeth,revWindow,revNames,'revComp_{0}_{1}_{2}'.format('all',binDir,fileName),num,uce,inuce,window,graphs,nucLine,base,combinations)
+				plotGraphs(revMeth,revWindow,revNames,'revComp_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format('all',uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations)
 
 # 		# By Type
 		for type in typeList:
 			typeBool,typeMeth,typeWindow,typeNames = groupSeparate(type,directionFeatures,'type',fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-			plotGraphs(typeMeth,typeWindow,typeNames,'{0}_{1}_{2}'.format(type,binDir,fileName),num,uce,inuce,window,graphs,nucLine,base,combinations)
+			plotGraphs(typeMeth,typeWindow,typeNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format(type,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations)
 			if revCom:
 				typercMeth,typercWindow,typercNames = RevCompLibrary.main(typeBool,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-				plotGraphs(typercMeth,typercWindow,typercNames,'revComp_{0}_{1}_{2}'.format(type,binDir,fileName),num,uce,inuce,window,graphs,nucLine,base,combinations)
+				plotGraphs(typercMeth,typercWindow,typercNames,'revComp_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format(type,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations)
 
 		# By Direction
 		for dir in dirList:
 			dirBool,dirMeth,dirWindow,dirNames = groupSeparate(dir,directionFeatures,'compareBoundaries',fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-			plotGraphs(dirMeth,dirWindow,dirNames,'{0}_{1}_{2}_{3}'.format('all',dir,binDir,fileName),num,uce,inuce,window,graphs,nucLine,base,combinations)
+			plotGraphs(dirMeth,dirWindow,dirNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}'.format('all',dir,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations)
 			for type in typeList:
 				typeBool,typeMeth,typeWindow,typeNames = groupSeparate(type,directionFeatures,'type',fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-				plotGraphs(typeMeth,typeWindow,typeNames,'{0}_{1}_{2}_{3}'.format(type,dir,binDir,fileName),num,uce,inuce,window,graphs,nucLine,base,combinations)
+				plotGraphs(typeMeth,typeWindow,typeNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}'.format(type,dir,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations)
 
 if __name__ == "__main__":
 	main()

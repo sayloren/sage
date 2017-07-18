@@ -22,6 +22,7 @@ def compactWindow(features,label,num,uce,inuce,window,searchList):
 		outCollect.append(outElement)
 	outFlatten = flattenWindow(outCollect)
 	outDataFrame, names = dfWindow(outFlatten)
+	print 'Retrieved sliding window data for nucleotides strings {1}'.format(names)
 	return outDataFrame, names
 
 # convert to a data frame with a list for each element x nucleotide string

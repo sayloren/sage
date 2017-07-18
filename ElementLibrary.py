@@ -39,6 +39,7 @@ def getRange(btFeatures,fileName,num,uce,inuce):
 	midFeatures['chr'] = midFeatures.loc[:,0]
 	midFeatures['size'] = midFeatures.loc[:,2].astype(int)-midFeatures.loc[:,1].astype(int)
 	rangeFeatures = midFeatures[['type','id','size','chr','sBoundary','start','sEdge','sCenter','eCenter','eEdge','end','eBoundary']]
+# 	print 'Getting the coordinates for the area to graph, {0} from the middle of the element, {1} inset from the edges, {2} flanking regions'.format()
 	return rangeFeatures
 
 # get the strings for sliding window regions

@@ -26,6 +26,7 @@ def evalN(rangeFeatures,fileName,binDir):
 	rangeFeatures['compareBoundaries'] = rangeFeatures.apply(lambda row: (compareN(row['feature'],binDir)),axis=1)
 	compareEnds = pd.DataFrame(rangeFeatures[['chr','start','end','compareBoundaries']])
 	# put bin size calibration here
+	print 'Sorting the element boundaries by bin size {0}'.format(binDir)
 	return rangeFeatures
 
 def main(rangeFeatures,fileName,binDir):

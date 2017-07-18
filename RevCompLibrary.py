@@ -63,6 +63,7 @@ def dirLine(directionFeatures,mFiles,num,uce,inuce,window,methCovThresh,methPerT
 
 def main(directionFeatures,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome):
 	groupMeth,compWindow,compNames = dirLine(directionFeatures,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
+	print 'Completed reverse complement sorting for {0} items, with {1} bin sorting'.format(len(directionFeatures.index),binDir)
 	return groupMeth,compWindow,compNames
 
 if __name__ == "__main__":

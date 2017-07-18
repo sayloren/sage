@@ -12,18 +12,8 @@ from matplotlib.colors import ListedColormap
 import matplotlib.gridspec as gridspec
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-# from numpy import sin, linspace, pi
-# import numdifftools as nd
 import numpy as np
-# import numpy.ma as ma
 import pandas as pd
-# import re
-# import scipy as sp
-# import scipy.fftpack
-# from scipy.interpolate import splrep, splev
-# from scipy import signal as ssignal
-# import scipy.stats as ss
-# from scipy.stats import mstats
 import seaborn as sns
 
 # Transform the Frequency, Percentage and Coverage data into graphable data frames
@@ -68,6 +58,8 @@ def methIndex(dataframe,yItem,zItem,num):
 	
 	PlustransMeth = PlustransMeth[PlustransMeth.columns].astype(float)
 	MinustransMeth = MinustransMeth[MinustransMeth.columns].astype(float)
+	
+	print 'Converted {0} by {1} into data frame with shapes plus-{2} and minus-{3}'.format(yItem,zItem,PlustransMeth.shape(),MinustransMeth.shape())
 	
 	return PlustransMeth, MinustransMeth
 
