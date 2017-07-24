@@ -16,27 +16,58 @@ from numpy import sin, linspace, pi
 import numdifftools as nd
 import numpy as np
 import pandas as pd
+# from peakdetect import peakdetect
+import scipy.stats as ss
 import scipy as sp
 import scipy.fftpack
 from scipy.interpolate import splrep, splev
-from scipy import signal as ssignal
-import scipy.stats as ss
+from scipy import signal
 from scipy.stats import mstats
 import seaborn as sns
 
+# Get just the elemenet
+def justElement(region,num,uce,halfwindow,window):
+	element = region[(((num-uce)/2)-halfwindow):(((num-uce)/2)+uce-halfwindow)]
+	return element
+
+# Get just the downstream flank
+def downFlank(region,num,uce,halfwindow,window):
+	dFlank = region[(((num-uce)/2)+uce-halfwindow):(num-window-window)]
+	return dFlank
+
+# Get just the upstream flank
+def upFlank(region,num,uce,halfwindow,window):
+	uFlank = region[window:(((num-uce)/2)-halfwindow)]
+	return uFlank
+
+# Perform fourier transform
+def performFourier(region):
+	Fs = 1.0 # sampling rate
+	Ts = 1.0/Fs # sampling interval
+	
+	# length of the signal
+	nsd = len(region)
+	ksd = np.arange(nsd)
+	Tsd = nsd/Fs
+	
+	# two sides frequency range
+	frqsd = ksd/Tsd
+	
+	# one side frequncy range
+	frqsd = frqsd[range(nsd/2)]
+	
+	# fft computing and normalization
+	Ysd = np.fft.fft(region)/nsd
+	Ysd = Ysd[range(nsd/2)]
+	
+	return frqsd, Ysd
+
 # Make signal graphs
-def graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
+def graphSignal(slidingWinDF,names,fileName,num,uce,inuce,window,nucLine):
 	
 	# Parameters used thougout
 	fillX = range(0,(num-window))
 	halfwindow = ((window/2)+1)
-	
-	# Plot settings
-	sns.set_style('ticks')
-	gs = gridspec.GridSpec(3,1,height_ratios=[3,1,1]) # for the ratios of the graphs against each other
-	gs.update(hspace=.8) # setting the space between the graphs
-	info = str(fileName) + ', '+ str(len(pdWindow)) + ' - ' "UCES"
-	plt.suptitle(info,fontsize=10)
 
 	# Get mean for AT
 	ATNames = [names.index(i) for i in names if 'A' in i or 'T' in i]
@@ -44,6 +75,13 @@ def graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
 	ATconcat = pd.concat(ATDataFrames,axis=1)
 	ATgroup = ATconcat.groupby(ATconcat.columns,axis=1).sum()
 	ATmean = ATgroup.mean()
+
+	# File name
+	info = str(fileName) + ', '+ str(len(ATgroup.index)) + ' - ' "UCES"
+
+	# Plot settings
+	sns.set_style('ticks')
+	plt.suptitle(info,fontsize=10)
 
 	# Filename
 	pp = PdfPages('Signal_{0}.pdf'.format(fileName))
@@ -61,19 +99,23 @@ def graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
 	secondDer[0:window] = 0 # small edge effect
 	secondDer[-window:] = 0 # small edge effect
 	
+	#https://blog.ytotech.com/2015/11/01/findpeaks-in-python/
+	# return the locations of the inflection points
+# 	SDpeaks = peakdetect(secondDer,lookahead=100)
+	
 	# Plot smoothed mean AT
-	ax4 = plt.subplot(gs[0,:])
-	ax4.plot(fillX,smoothMean,linewidth=1, color='#3e1638',alpha=0.9)
-	ax4.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
-	ax4.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
-	ax4.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
-	ax4.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
-	ax4.set_yticks(ax4.get_yticks()[::2])
-	ax4.set_ylabel('% AT Content',size=8)
-	ax4.set_title('Fitted Mean AT Content',size=8)
+	ax0 = plt.subplot(gs[0,:])
+	ax0.plot(fillX,smoothMean,linewidth=1, color='#3e1638',alpha=0.9)
+	ax0.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+	ax0.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+	ax0.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+	ax0.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+	ax0.set_yticks(ax0.get_yticks()[::2])
+	ax0.set_ylabel('% AT Content',size=8)
+	ax0.set_title('Fitted Mean AT Content',size=8)
 	
 	# First derivative
-	ax5 = plt.subplot(gs[1,:],sharex=ax4)
+	ax5 = plt.subplot(gs[1,:],sharex=ax0)
 	ax5.plot(fillX,firstDer,linewidth=1, color='#3e1638',alpha=0.8)
 	ax5.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
 	ax5.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
@@ -85,7 +127,7 @@ def graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
 	ax5.set_title('First Derivative of Fitted Mean',size=8)
 	
 	# Second derivative
-	ax6 = plt.subplot(gs[2,:],sharex=ax4)
+	ax6 = plt.subplot(gs[2,:],sharex=ax0)
 	ax6.plot(fillX,secondDer,linewidth=1, color='#3e1638',alpha=0.7)
 	#http://stackoverflow.com/questions/13691775/python-pinpointing-the-linear-part-of-a-slope
 	#http://stackoverflow.com/questions/16323139/finding-inflection-points-in-spline-fitted-1d-data
@@ -98,6 +140,22 @@ def graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
 	ax6.set_xlabel('Position',size=6)
 	ax6.set_yticks(ax6.get_yticks()[::2])
 	ax6.set_title('Second Derivative of Fitted Mean',size=8)
+
+	sns.despine()
+	plt.savefig(pp, format='pdf')
+	
+	gs = gridspec.GridSpec(1,1,height_ratios=[1])
+	
+	ax7 = plt.subplot(gs[0,:],sharex=ax0)
+	endRange = 100
+	widths = np.arange(3, endRange)
+	cwtmatr = signal.cwt(firstDer, signal.ricker, widths)
+	ax7.imshow(cwtmatr,cmap='RdPu',extent=[0, (num-window), 1, endRange],aspect='auto',vmax=abs(cwtmatr).max(), vmin=-abs(cwtmatr).max())
+# 	ax7.set_ylabel('Frequency',size=8)
+	ax7.set_xlabel('Position',size=6)
+	ax7.set_yticks(ax7.get_yticks()[::2])
+	ax7.set_title('Continuous Wavelet Transformation Convolved Over Range {0}-{1} for the First Derivative'.format(widths[0],endRange),size=8)
+	
 	sns.despine()
 	plt.savefig(pp, format='pdf')
 	
@@ -105,84 +163,63 @@ def graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
 	gs.update(hspace=.65)
 	
 	# Short Fourier Transform
-	ax7 = plt.subplot(gs[0,:],sharex=ax4)
-	f1, t1, Zxx1 = ssignal.stft(firstDer,fs=1.0, window='hann',nperseg=30,noverlap=None)#,nperseg=11,noverlap=5
-	ax7.pcolormesh(t1,f1,np.abs(Zxx1),cmap='RdPu')
-	ax7.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#5fc85b')
-	ax7.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#5fc85b')
-	ax7.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#96c85b')
-	ax7.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#96c85b')
-	ax7.set_ylabel('Frequency',size=8)
-	ax7.set_xlabel('Position',size=6)
-	ax7.set_yticks(ax7.get_yticks()[::2])
-	ax7.set_title('Short Fourier Transform',size=8)#30 bp bins
+	ax8 = plt.subplot(gs[0,:],sharex=ax0)
+	sbins = 30
+	f1, t1, Zxx1 = signal.stft(firstDer,fs=1.0, window='hann',nperseg=sbins,noverlap=None)#,nperseg=11,noverlap=5
+	ax8.pcolormesh(t1,f1,np.abs(Zxx1),cmap='RdPu')
+	ax8.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#5fc85b')
+	ax8.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#5fc85b')
+	ax8.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#96c85b')
+	ax8.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#96c85b')
+	ax8.set_ylabel('Frequency',size=8)
+	ax8.set_xlabel('Position',size=6)
+	ax8.set_yticks(ax8.get_yticks()[::2])
+	ax8.set_title('Short Fourier Transform over {0} bins'.format(sbins),size=8)
 	
 	# First Derivative
-	ax8 = plt.subplot(gs[1,:],sharex=ax4)
-	ax8.plot(fillX,firstDer,linewidth=1, color='#3e1638')
-	ax8.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
-	ax8.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
-	ax8.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
-	ax8.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
-	ax8.axvspan((((num-uce)/2)-halfwindow),(((num-uce)/2)+uce-halfwindow),facecolor = '#ae3e9e',label='',alpha=0.1)
-	ax8.axvspan(window,(((num-uce)/2)-halfwindow),facecolor = '#863eae',label='',alpha=0.1)
-	ax8.axvspan((((num-uce)/2)+uce-halfwindow),(num-window-window),facecolor = '#ae3e66',label='',alpha=0.1)
-	ax8.set_yticks(ax8.get_yticks()[::2])
-	ax8.set_xlabel('Position',size=6)
-	ax8.set_ylabel('Amplitude',size=8)
-	ax8.set_title('First Derivative of Fitted Mean',size=8)
-	
-	Fs = 1.0 # sampling rate
-	Ts = 1.0/Fs # sampling interval
-	y2sd = firstDer[(((num-uce)/2)-halfwindow):(((num-uce)/2)+uce-halfwindow)]
-	n2sd = len(y2sd) # length of the signal
-	k2sd = np.arange(n2sd)
-	T2sd = n2sd/Fs
-	frq2sd = k2sd/T2sd # two sides frequency range
-	frq2sd = frq2sd[range(n2sd/2)] # one side frequncy range
-	Y2sd = np.fft.fft(y2sd)/n2sd # fft computing and normalization
-	Y2sd = Y2sd[range(n2sd/2)]
-	y3sd = firstDer[window:(((num-uce)/2)-halfwindow)]
-	n3sd = len(y3sd)
-	k3sd = np.arange(n3sd)
-	T3sd = n3sd/Fs
-	frq3sd = k3sd/T3sd
-	frq3sd = frq3sd[range(n3sd/2)]
-	Y3sd = np.fft.fft(y3sd)/n3sd
-	Y3sd = Y3sd[range(n3sd/2)]
-	y4sd = firstDer[(((num-uce)/2)+uce-halfwindow):(num-window-window)]
-	n4sd = len(y4sd)
-	k4sd = np.arange(n4sd)
-	T4sd = n4sd/Fs
-	frq4sd = k4sd/T4sd
-	frq4sd = frq4sd[range(n4sd/2)]
-	Y4sd = np.fft.fft(y4sd)/n4sd
-	Y4sd = Y4sd[range(n4sd/2)]
-	
-# 	FFT for sections of the smoothed second derivative
-	ax9 = plt.subplot(gs[2,0])
-	ax9.plot(frq3sd,abs(Y3sd),linewidth=1, color='#863eae')
-	ax9.set_ylabel('|Y(freq)|',size=8)
-	ax9.set_xlabel('Freq(Hz)',size=6)#AT Rate Change
+	ax9 = plt.subplot(gs[1,:],sharex=ax0)
+	ax9.plot(fillX,firstDer,linewidth=1, color='#3e1638')
+	ax9.axvline(x=(((num-uce)/2)+(inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+	ax9.axvline(x=(((num-uce)/2)+(uce-inuce-halfwindow)),linewidth=.05,linestyle='dashed',color='#e7298a')
+	ax9.axvline(x=(((num-uce)/2)-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+	ax9.axvline(x=(((num-uce)/2)+uce-halfwindow),linewidth=.05,linestyle='dashed',color='#bd4973')
+	ax9.axvspan((((num-uce)/2)-halfwindow),(((num-uce)/2)+uce-halfwindow),facecolor = '#ae3e9e',label='',alpha=0.1)
+	ax9.axvspan(window,(((num-uce)/2)-halfwindow),facecolor = '#863eae',label='',alpha=0.1)
+	ax9.axvspan((((num-uce)/2)+uce-halfwindow),(num-window-window),facecolor = '#ae3e66',label='',alpha=0.1)
 	ax9.set_yticks(ax9.get_yticks()[::2])
-	ax10 = plt.subplot(gs[2,1],sharey=ax9)
-	plt.setp(ax10.get_yticklabels(), visible=False)
-	ax10.plot(frq2sd,abs(Y2sd),linewidth=1, color='#ae3e9e')
-	ax10.set_title('Power Series for Highlighted Regions',size=8)# Power Spectrum Analysis for FFT
-	ax10.set_xlabel('Freq(Hz)',size=6)
-	ax11 = plt.subplot(gs[2,2],sharey=ax9)
+	ax9.set_xlabel('Position',size=6)
+	ax9.set_ylabel('Amplitude',size=8)
+	ax9.set_title('First Derivative of Fitted Mean',size=8)
+	
+	ysdElement = justElement(firstDer,num,uce,halfwindow,window)
+	frq2sd, Y2sd = performFourier(ysdElement)
+	ysdUp = upFlank(firstDer,num,uce,halfwindow,window)
+	frq3sd, Y3sd = performFourier(ysdUp)
+	ysdDown = downFlank(firstDer,num,uce,halfwindow,window)
+	frq4sd, Y4sd = performFourier(ysdDown)
+	
+	#FFT for sections of the smoothed second derivative
+	ax10 = plt.subplot(gs[2,0])
+	ax10.plot(frq3sd,abs(Y3sd),linewidth=1, color='#863eae')
+	ax10.set_ylabel('|Y(freq)|',size=8)
+	ax10.set_xlabel('Freq(Hz)',size=6) #AT Rate Change
+	ax10.set_yticks(ax10.get_yticks()[::2])
+	ax11 = plt.subplot(gs[2,1],sharey=ax10)
 	plt.setp(ax11.get_yticklabels(), visible=False)
-	ax11.plot(frq4sd,abs(Y4sd),linewidth=1, color='#ae3e66')
+	ax11.plot(frq2sd,abs(Y2sd),linewidth=1, color='#ae3e9e')
+	ax11.set_title('Power Series for Highlighted Regions',size=8)# Power Spectrum Analysis for FFT
 	ax11.set_xlabel('Freq(Hz)',size=6)
-	sns.despine()
-	pp.savefig()
+	ax12 = plt.subplot(gs[2,2],sharey=ax10)
+	plt.setp(ax12.get_yticklabels(), visible=False)
+	ax12.plot(frq4sd,abs(Y4sd),linewidth=1, color='#ae3e66')
+	ax12.set_xlabel('Freq(Hz)',size=6)
 	
 	sns.despine()
 	pp.savefig()
 	pp.close()
 
-def main(slidingWinDF,fileName,num,uce,inuce,window,nucLine):
-	graphSignal(slidingWinDF,fileName,num,uce,inuce,window,nucLine)
+def main(slidingWinDF,names,fileName,num,uce,inuce,window,nucLine):
+	graphSignal(slidingWinDF,names,fileName,num,uce,inuce,window,nucLine)
 	
 if __name__ == "__main__":
 	main()

@@ -59,7 +59,7 @@ def methIndex(dataframe,yItem,zItem,num):
 	PlustransMeth = PlustransMeth[PlustransMeth.columns].astype(float)
 	MinustransMeth = MinustransMeth[MinustransMeth.columns].astype(float)
 	
-	print 'Converted {0} by {1} into data frame with shapes plus-{2} and minus-{3}'.format(yItem,zItem,PlustransMeth.shape(),MinustransMeth.shape())
+	print 'Converted {0} by {1} into data frame'.format(yItem,zItem)
 	
 	return PlustransMeth, MinustransMeth
 
