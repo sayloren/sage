@@ -54,15 +54,18 @@ def slideDirection(negStr,posStr,num,uce,inuce,window,nucLine):
 	return compWindow, negNames # or could be posNames, they will be the same
 
 # Separate on plus and minus orientation, RCsort and return methylation and sliding window computations
-def dirLine(directionFeatures,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome):
+def dirLine(directionFeatures,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs):
 	negStr = (directionFeatures[(directionFeatures['compareBoundaries'] == '-')])
 	posStr = (directionFeatures[(directionFeatures['compareBoundaries'] == '+')])
 	compWindow, compNames = slideDirection(negStr,posStr,num,uce,inuce,window,nucLine)
-	groupMeth = methDirection(negStr,posStr,mFiles,num,uce,inuce,methCovThresh,methPerThresh,faGenome)
+	if any(x in graphs for x in ['methylation','cluster']):
+		groupMeth = methDirection(negStr,posStr,mFiles,num,uce,inuce,methCovThresh,methPerThresh,faGenome)
+	else: 
+		groupMeth = None
 	return groupMeth,compWindow,compNames
 
-def main(directionFeatures,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome):
-	groupMeth,compWindow,compNames = dirLine(directionFeatures,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
+def main(directionFeatures,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs):
+	groupMeth,compWindow,compNames = dirLine(directionFeatures,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs)
 	print 'Completed reverse complement sorting for {0} items, with {1} bin sorting'.format(len(directionFeatures.index),binDir)
 	return groupMeth,compWindow,compNames
 

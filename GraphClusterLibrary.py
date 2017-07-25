@@ -24,6 +24,7 @@ import seaborn as sns
 
 # Transform the Frequency, Percentage and Coverage data into graphable data frames, returning just the info for the element
 def elemenetIndex(dataframe,yItem,zItem,extra,num,uce,halfwindow,window): 
+
 	# x item is methLoc, y item is either tissue or id, z item is coverage, percentage, or frequency
 	new_index = range(0,num)
 	
@@ -42,13 +43,9 @@ def elemenetIndex(dataframe,yItem,zItem,extra,num,uce,halfwindow,window):
 	PlusdupMeth = PlussortMeth.drop_duplicates(['methLoc',yItem,zItem],keep='last') # zItem Move below where extra is merged in
 	MinusdupMeth = MinussortMeth.drop_duplicates(['methLoc',yItem,zItem],keep='last') # zItem
 	
-	print PlusdupMeth
-	
 	# Pivot the data frame so that each tissue/cell type is a column
 	PluspivotMeth = pd.pivot_table(PlusdupMeth,index='methLoc',columns=[yItem],values=zItem,fill_value=0)
 	MinuspivotMeth = pd.pivot_table(MinusdupMeth,index='methLoc',columns=[yItem],values=zItem,fill_value=0)
-	
-	print PluspivotMeth
 	
 	# Grouping a collection of a values in the extra column
 	PlusgroupMeth = PlussubMeth.join(PlussubMeth.groupby(['methLoc',yItem])[extra].unique(),on=['methLoc',yItem],rsuffix='_r')#PlussubMeth['methLoc',yItem].map()
@@ -61,12 +58,10 @@ def elemenetIndex(dataframe,yItem,zItem,extra,num,uce,halfwindow,window):
 	# Just the new extra list, and yItem
 	PlusextraYMeth = PlusgroupMeth[[yItem,'{0}_r'.format(extra)]]
 	MinusextraYMeth = MinusgroupMeth[[yItem,'{0}_r'.format(extra)]]
-
+	
 	# Join column with grouped extra info
 	PluscatMeth = PluspivotMeth.join(PlusextraLMeth.set_index('methLoc'))
 	MinuscatMeth = MinuspivotMeth.join(MinusextraLMeth.set_index('methLoc'))
-	
-	print PluscatMeth
 
 	PluspivotMeth.columns.name = None
 	MinuspivotMeth.columns.name = None
@@ -74,12 +69,6 @@ def elemenetIndex(dataframe,yItem,zItem,extra,num,uce,halfwindow,window):
 	# Give new index, using the methLocations
 	PlusindexMeth = PluspivotMeth.reindex(new_index,fill_value=0)
 	MinusindexMeth = MinuspivotMeth.reindex(new_index,fill_value=0)
-
-	# Join row with grouped extra info
-	PlusappendMeth = PlusindexMeth.append(PlusextraYMeth)
-	MinusappendMeth = MinusindexMeth.append(MinusextraYMeth)
-
-	print PlusappendMeth
 
 	# Remove the index column name
 	PlusindexMeth.index.name = None
@@ -95,12 +84,10 @@ def elemenetIndex(dataframe,yItem,zItem,extra,num,uce,halfwindow,window):
 	
 	PlustransMeth = PlustransMeth[PlustransMeth.columns].astype(float)
 	MinustransMeth = MinustransMeth[MinustransMeth.columns].astype(float)
-
-	print PlustransMeth
-
+	
 	print 'Converted {0} by {1} into data frame'.format(yItem,zItem)
 	
-	return PlustransMeth, MinustransMeth
+	return PlustransMeth,MinustransMeth,PlusextraLMeth,MinusextraLMeth,PlusextraYMeth,MinusextraYMeth
 
 # Make some graphs for fangs
 def graphCluster(slidingWinDF,pdMeth,names,fileName,num,uce,inuce,window,nucLine,methylationflank):
@@ -147,8 +134,10 @@ def graphCluster(slidingWinDF,pdMeth,names,fileName,num,uce,inuce,window,nucLine
 
 	# Various combinations to plot on heatmaps, just for element
 	# Frequency x (tissue, id)
-	FreqPlusID,FreqMinusID = elemenetIndex(pdMeth,'id','methFreq','tissue',num,uce,halfwindow,window)
-	FreqPlusTis,FreqMinusTis = elemenetIndex(pdMeth,'tissue','methFreq','id',num,uce,halfwindow,window)
+	FreqPlusID,FreqMinusID,PlusLMethID,MinusLMethID,PlusYMethID,MinusYMethID = elemenetIndex(pdMeth,'id','methFreq','tissue',num,uce,halfwindow,window)
+	FreqPlusTis,FreqMinusTis,PlusLMethTis,MinusLMethTis,PlusYMethTis,MinusYMethTis = elemenetIndex(pdMeth,'tissue','methFreq','id',num,uce,halfwindow,window)
+	
+	# zip a dictionary for location and y axis, to use as row color
 	
 	# Remove UCEs with out methylation within the element
 	FreqPlusID = FreqPlusID[(FreqPlusID.T != 0).any()]

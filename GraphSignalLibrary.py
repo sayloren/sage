@@ -148,7 +148,7 @@ def graphSignal(slidingWinDF,names,fileName,num,uce,inuce,window,nucLine):
 	
 	ax7 = plt.subplot(gs[0,:],sharex=ax0)
 	endRange = 100
-	widths = np.arange(3, endRange)
+	widths = np.arange(1, endRange)
 	cwtmatr = signal.cwt(firstDer, signal.ricker, widths)
 	ax7.imshow(cwtmatr,cmap='RdPu',extent=[0, (num-window), 1, endRange],aspect='auto',vmax=abs(cwtmatr).max(), vmin=-abs(cwtmatr).max())
 # 	ax7.set_ylabel('Frequency',size=8)

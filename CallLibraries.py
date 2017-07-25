@@ -6,13 +6,12 @@ July 5 2017
 
 To Do:
 IO - Have input methylation data in separate callable folder, print output graphs to new folder
-If no methylation plotting, don't process methylation
+If no methylation plotting, don't process methylation files
 Add verbose as a setting to args
 Cluster plot - just the element for clustering, return out clustered info for organization, label row colors and column colors with tissue for id x pos
 Graph for bin = size calculation
 Table for each group % =
 Random regions printed on graph
-Signal analysis
 AT mean cluster SD row color
 
 """
@@ -80,18 +79,18 @@ def getFilepaths(path):
 	return os.join(current_dir,relative_path)
 
 # for type and direction, separate the groups and run the analyses
-def groupSeparate(List,directionFeatures,typecolumn,fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome):
+def groupSeparate(List,directionFeatures,typecolumn,fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs):
 
 	# subset by bool presence
 	bool = (directionFeatures[directionFeatures[typecolumn] == List])
 
 	# if there is nothing in that set, skip
 	if len(bool.index) != 0:
-		Meth,Window,Names = TypeLibrary.main(bool,fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
+		Meth,Window,Names = TypeLibrary.main(bool,fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs)
 	return bool,Meth,Window,Names
 
 # the plotting options, if in the list of plot flags, run graph
-def plotGraphs(pdMeth,slidingWinDF,names,fileName,num,uce,inuce,window,graphs,nucLine,base,combinations,methylationflank):
+def plotGraphs(pdMeth,slidingWinDF,names,fileName,num,uce,inuce,window,graphs,nucLine,base,combinations,methFlank):
 	if 'fangs' in graphs:
 		GraphFangLibrary.main(slidingWinDF,names,fileName,num,uce,inuce,window,nucLine)
 	if 'signal' in graphs:
@@ -105,7 +104,7 @@ def plotGraphs(pdMeth,slidingWinDF,names,fileName,num,uce,inuce,window,graphs,nu
 # 	if 'combinations' in graphs:
 # 		BinLibrary.main(base,combinations)
 	if 'cluster' in graphs:
-		GraphClusterLibrary.main(slidingWinDF,pdMeth,names,fileName,num,uce,inuce,window,nucLine,methylationflank)
+		GraphClusterLibrary.main(slidingWinDF,pdMeth,names,fileName,num,uce,inuce,window,nucLine,methFlank)
 
 def main():
 	# Collect arguments
@@ -158,27 +157,30 @@ def main():
 		if 'all' in typeList:
 			typeList.remove('all')
 			allWindow, allNames = FangsLibrary.main(rangeFeatures['combineString'],rangeFeatures['id'],num,uce,inuce,window,nucLine)
-			pdMeth = MethylationLibrary.main(mFiles,rangeFeatures,num,uce,inuce,methCovThresh,methPerThresh,faGenome)
-			plotGraphs(pdMeth,allWindow,allNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format('all',uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methylationflank)
+			if any(x in graphs for x in ['methylation','cluster']):
+				pdMeth = MethylationLibrary.main(mFiles,rangeFeatures,num,uce,inuce,methCovThresh,methPerThresh,faGenome)
+			else:
+				pdMeth = None
+			plotGraphs(pdMeth,allWindow,allNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format('all',uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methFlank)
 			if revCom:
-				revMeth,revWindow,revNames = RevCompLibrary.main(directionFeatures,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-				plotGraphs(revMeth,revWindow,revNames,'revComp_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format('all',uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methylationflank)
+				revMeth,revWindow,revNames = RevCompLibrary.main(directionFeatures,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs)
+				plotGraphs(revMeth,revWindow,revNames,'revComp_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format('all',uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methFlank)
 
 # 		# By Type
 		for type in typeList:
-			typeBool,typeMeth,typeWindow,typeNames = groupSeparate(type,directionFeatures,'type',fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-			plotGraphs(typeMeth,typeWindow,typeNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format(type,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methylationflank)
+			typeBool,typeMeth,typeWindow,typeNames = groupSeparate(type,directionFeatures,'type',fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs)
+			plotGraphs(typeMeth,typeWindow,typeNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format(type,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methFlank)
 			if revCom:
-				typercMeth,typercWindow,typercNames = RevCompLibrary.main(typeBool,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-				plotGraphs(typercMeth,typercWindow,typercNames,'revComp_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format(type,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methylationflank)
+				typercMeth,typercWindow,typercNames = RevCompLibrary.main(typeBool,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs)
+				plotGraphs(typercMeth,typercWindow,typercNames,'revComp_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}'.format(type,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methFlank)
 
 		# By Direction
 		for dir in dirList:
-			dirBool,dirMeth,dirWindow,dirNames = groupSeparate(dir,directionFeatures,'compareBoundaries',fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-			plotGraphs(dirMeth,dirWindow,dirNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}'.format('all',dir,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methylationflank)
+			dirBool,dirMeth,dirWindow,dirNames = groupSeparate(dir,directionFeatures,'compareBoundaries',fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs)
+			plotGraphs(dirMeth,dirWindow,dirNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}'.format('all',dir,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methFlank)
 			for type in typeList:
-				typeBool,typeMeth,typeWindow,typeNames = groupSeparate(type,directionFeatures,'type',fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome)
-				plotGraphs(typeMeth,typeWindow,typeNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}'.format(type,dir,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methylationflank)
+				typeBool,typeMeth,typeWindow,typeNames = groupSeparate(type,directionFeatures,'type',fileName,binDir,mFiles,num,uce,inuce,window,methCovThresh,methPerThresh,nucLine,faGenome,graphs)
+				plotGraphs(typeMeth,typeWindow,typeNames,'{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}'.format(type,dir,uce,inuce,num,binDir,window,fileName,stringName),num,uce,inuce,window,graphs,nucLine,base,combinations,methFlank)
 
 if __name__ == "__main__":
 	main()
