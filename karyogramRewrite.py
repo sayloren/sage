@@ -1,5 +1,5 @@
 """
-Script to make karyogram pictures
+Script to make karyogram pictures, where annotations can be either dense or spread out on each chromosome
 
 Wren Saylor
 August 21 2017
@@ -24,9 +24,10 @@ def get_args():
 	parser = argparse.ArgumentParser(description="plot a karyogram for some bedfile data")
 	parser.add_argument("file", type=argparse.FileType('rU'), help='A file containing a list of paths to the element files to annotate')
 	parser.add_argument("-k","--karyogramdata", type=str, default="karyotype_hg19.txt")
-	parser.add_argument("-c","--colorcolumn",type=int,default="4",help="column to use to make the bands on the karyogram, remember this is 0 based, so subtract 1")
+	parser.add_argument("-c","--colorcolumn",type=int,default="3",help="column to use for annotations, must be the same for all annotation files, remember this is 0 based, so subtract 1")
+	parser.add_argument("-a","--annotationcolorcolumn",type=int,default="4",help="column to use chromosome banding colors from the karyogram file, remember this is 0 based, so subtract 1")
 	parser.add_argument("-g","--genome",type=str, default="hg19.genome")
-	parser.add_argument("-s","--spread",action='store_true', help='if you want each chromosome on a different page with the full spread of annotations')
+	parser.add_argument("-s","--spread",action='store_true', help='add if you want each chromosome on a different page with the full spread of annotations')
 	return parser.parse_args()
 
 def get_bedtools_features(strFileName):
@@ -69,7 +70,7 @@ def unique_annotation_element_dictionary(annotationFiles,column):
 	colorDictAnnotation = dict(zip(flatUnique,colorPaletteAnnotation))
 	return colorDictAnnotation
 
-def set_plot_params_dense(annotationFiles,regions,column,sortedChrSect,length_first,ax,colorDictKaryogram,colorDictAnnotation):
+def set_plot_params_dense(annotationFiles,regions,column,annotationcolumn,sortedChrSect,length_first,ax,colorDictKaryogram,colorDictAnnotation):
 	num_annotation_files = len(annotationFiles)
 	annotation_space = .1
 	DIM = 1.0
@@ -88,11 +89,11 @@ def set_plot_params_dense(annotationFiles,regions,column,sortedChrSect,length_fi
 		center_x=x_start+(x_end-x_start)/2.0
 		subset_chr = regions.loc[regions[0]==chromosome['chromosome']]
 		end_coord = subset_chr.loc[subset_chr[2].idxmax()]
-		end_color = colorDictKaryogram[end_coord[column]]
+		end_color = colorDictKaryogram[end_coord[annotationcolumn]]
 		start_coord = subset_chr.loc[subset_chr[1].idxmin()]
-		start_color = colorDictKaryogram[start_coord[column]]
-		w1 = Wedge((center_x,y_start-.006),radius,-90.0,270.0,facecolor=start_color,edgecolor='black',linewidth=1.5)
-		w2 = Wedge((center_x,y_end+.006),radius,-270.0,90.0,facecolor=end_color,edgecolor='black',linewidth=1.5)
+		start_color = colorDictKaryogram[start_coord[annotationcolumn]]
+		w1 = Wedge((center_x,y_start),radius,-90.0,270.0,facecolor=start_color,edgecolor='black',linewidth=1.5)
+		w2 = Wedge((center_x,y_end),radius,-270.0,90.0,facecolor=end_color,edgecolor='black',linewidth=1.5)
 		ax.add_patch(w1)
 		ax.add_patch(w2)
 		ax.plot([x_start, x_start], [y_start, y_end], ls='-', color='black')
@@ -102,7 +103,7 @@ def set_plot_params_dense(annotationFiles,regions,column,sortedChrSect,length_fi
 			current_height_band = band[2]-band[1]
 			current_height_band_scaled=((y_end-y_start)/chr_size)*current_height_band
 			band_scaled=y_start+((y_end-y_start)/chr_size)*band[1]
-			band_color = colorDictKaryogram[band[column]]
+			band_color = colorDictKaryogram[band[annotationcolumn]]
 			r=Rectangle((x_start,band_scaled),x_end-x_start,current_height_band_scaled,color=band_color)
 			ax.add_patch(r)
 		annotation_coord = (DIM*.015)
@@ -114,10 +115,11 @@ def set_plot_params_dense(annotationFiles,regions,column,sortedChrSect,length_fi
 				current_height_point_scaled=((y_end-y_start)/chr_size)*current_height_point
 				point_scaled=y_start+((y_end-y_start)/chr_size)*point[1]
 				point_color = colorDictAnnotation[point[column]]
-				r=Rectangle(((x_end+annotation_coord),point_scaled),.01,current_height_point_scaled,color=point_color,alpha=0.5)
+				r=Rectangle(((x_end+annotation_coord),point_scaled),.01,current_height_point_scaled,color=point_color)
 				ax.add_patch(r)
 			annotation_coord = annotation_coord+(DIM*.015)
 		ax.text(center_x-.045, y_end - (DIM * 0.07), chromosome['chromosome'])
+		order=order+1+(num_annotation_files*annotation_space*2)
 	collectPatches = []
 	for key,value in colorDictAnnotation.iteritems():
 		patch = patches.Patch(color=value, label=key)
@@ -126,7 +128,7 @@ def set_plot_params_dense(annotationFiles,regions,column,sortedChrSect,length_fi
 	ax.set_yticklabels([])
 	ax.set_xticklabels([])
 
-def set_plot_params_spread(annotationFiles,column,chromosome,length,chromosome_label,ax,colorDictKaryogram,colorDictAnnotation):
+def set_plot_params_spread(annotationFiles,column,annotationcolumn,chromosome,length,chromosome_label,ax,colorDictKaryogram,colorDictAnnotation):
 	num_annotation_files = len(annotationFiles)
 	annotation_space = .1
 	DIM = 1.0
@@ -141,9 +143,9 @@ def set_plot_params_spread(annotationFiles,column,chromosome,length,chromosome_l
 	radius=(x_end-x_start)/2.0
 	center_x=x_start+(x_end-x_start)/2.0
 	end_coord=chromosome.loc[chromosome[2].idxmax()]
-	end_color=colorDictKaryogram[end_coord[column]]
+	end_color=colorDictKaryogram[end_coord[annotationcolumn]]
 	start_coord=chromosome.loc[chromosome[1].idxmin()]
-	start_color=colorDictKaryogram[start_coord[column]]
+	start_color=colorDictKaryogram[start_coord[annotationcolumn]]
 	w1=Wedge((center_x,y_start),radius,-90.0,270.0,facecolor=start_color,edgecolor='black',linewidth=1.5)#-.006
 	w2=Wedge((center_x,y_end),radius,-270.0,90.0,facecolor=end_color,edgecolor='black',linewidth=1.5)#+.006
 	ax.add_patch(w1)
@@ -155,7 +157,7 @@ def set_plot_params_spread(annotationFiles,column,chromosome,length,chromosome_l
 		current_height_band=band[2]-band[1]
 		current_height_band_scaled=((y_end-y_start)/chr_size)*current_height_band
 		band_scaled=y_start+((y_end-y_start)/chr_size)*band[1]
-		band_color=colorDictKaryogram[band[column]]
+		band_color=colorDictKaryogram[band[annotationcolumn]]
 		r=Rectangle((x_start,band_scaled),x_end-x_start,current_height_band_scaled,color=band_color)
 		ax.add_patch(r)
 	annotation_coord=(DIM*.015)
@@ -189,7 +191,7 @@ def set_plot_params_spread(annotationFiles,column,chromosome,length,chromosome_l
 	ax.set_yticklabels([])
 	ax.set_xticklabels([])
 
-def plot_karyogram(annotationFiles,regions,column,genome,spread):
+def plot_karyogram(annotationFiles,regions,column,annotationcolumn,genome,spread):
 	# get the chromosomes and their sizes to plot, ordered
 	sortedChr = select_chromosomes(genome)
 
@@ -198,9 +200,9 @@ def plot_karyogram(annotationFiles,regions,column,genome,spread):
 	fig, ax = plt.subplots()
 	
 	# set color palette to as many unique column values
-	uniqueValsKaryogram = len(regions[column].unique())
+	uniqueValsKaryogram = len(regions[annotationcolumn].unique())
 	colorPaletteKaryogram = sns.color_palette(palette="Greys",n_colors=uniqueValsKaryogram,desat=.9)
-	colorDictKaryogram = dict(zip(regions[column].unique(),colorPaletteKaryogram))
+	colorDictKaryogram = dict(zip(regions[annotationcolumn].unique(),colorPaletteKaryogram))
 	colorDictAnnotation = unique_annotation_element_dictionary(annotationFiles,column)
 
 	# pdf params
@@ -210,7 +212,7 @@ def plot_karyogram(annotationFiles,regions,column,genome,spread):
 		for chromosome in unique_chromosomes:
 			length = sortedChr.loc[sortedChr['chromosome'] == chromosome]
 			chromosome_regions = regions.loc[regions[0] == chromosome]
-			set_plot_params_spread(annotationFiles,column,chromosome_regions,length,chromosome,ax,colorDictKaryogram,colorDictAnnotation)
+			set_plot_params_spread(annotationFiles,column,annotationcolumn,chromosome_regions,length,chromosome,ax,colorDictKaryogram,colorDictAnnotation)
 			sns.despine(left=True,bottom=True)
 			plt.savefig(pp, format='pdf')
 			ax.clear()
@@ -219,13 +221,13 @@ def plot_karyogram(annotationFiles,regions,column,genome,spread):
 		length_chr_one = sortedChr.loc[sortedChr['chromosome'] == 'chr1']
 		
 		# iterate through the chromosomes, and the patches to plot on the chromosomes
-		set_plot_params_dense(annotationFiles,regions,column,sortedChr[:12],length_chr_one,ax,colorDictKaryogram,colorDictAnnotation)
+		set_plot_params_dense(annotationFiles,regions,column,annotationcolumn,sortedChr[:12],length_chr_one,ax,colorDictKaryogram,colorDictAnnotation)
 		sns.despine(left=True,bottom=True)
 		plt.savefig(pp, format='pdf')
 		ax.clear()
 	
 		# iterate through the chromosomes, and the patches to plot on the chromosomes
-		set_plot_params_dense(annotationFiles,regions,column,sortedChr[12:],length_chr_one,ax,colorDictKaryogram,colorDictAnnotation)
+		set_plot_params_dense(annotationFiles,regions,column,annotationcolumn,sortedChr[12:],length_chr_one,ax,colorDictKaryogram,colorDictAnnotation)
 		sns.despine(left=True,bottom=True)
 		pp.savefig()
 	pp.close()
@@ -238,7 +240,7 @@ def main():
 	pdGenome = get_data(args.genome)
 	annotationFiles = [line.strip() for line in args.file]
 	
-	plot_karyogram(annotationFiles,pdRegions,args.colorcolumn,pdGenome,args.spread)
+	plot_karyogram(annotationFiles,pdRegions,args.colorcolumn,args.annotationcolorcolumn,pdGenome,args.spread)
 
 if __name__ == "__main__":
 	main()
