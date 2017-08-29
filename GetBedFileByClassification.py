@@ -70,7 +70,7 @@ def main():
 		genicFeatures = btFeatures.intersect(btGenicFlat)
 		exonicFeatures = btFeatures.intersect(btExonsNonN)
 		intronicFeatures = genicFeatures.subtract(exonicFeatures)
-		intergenicFeatures = genicFeatures.subtract(btFeatures)
+		intergenicFeatures = btFeatures.subtract(genicFeatures)
 		#Output these 0-based files
 		saveBedTool(exonicFeatures, 'Exons_0based_{0}.bed'.format(fileName))
 		saveBedTool(intronicFeatures, 'Introns_0based_{0}.bed'.format(fileName))
