@@ -91,8 +91,8 @@ def set_plot_params_dense(annotationFiles,regions,column,sortedChrSect,length_fi
 		end_color = colorDictKaryogram[end_coord[column]]
 		start_coord = subset_chr.loc[subset_chr[1].idxmin()]
 		start_color = colorDictKaryogram[start_coord[column]]
-		w1 = Wedge((center_x,y_start-.006),radius,0.0,180.0,facecolor=start_color,edgecolor='black',linewidth=1.5)
-		w2 = Wedge((center_x,y_end+.006),radius,180.0,0.0,facecolor=end_color,edgecolor='black',linewidth=1.5)
+		w1 = Wedge((center_x,y_start-.006),radius,-90.0,270.0,facecolor=start_color,edgecolor='black',linewidth=1.5)
+		w2 = Wedge((center_x,y_end+.006),radius,-270.0,90.0,facecolor=end_color,edgecolor='black',linewidth=1.5)
 		ax.add_patch(w1)
 		ax.add_patch(w2)
 		ax.plot([x_start, x_start], [y_start, y_end], ls='-', color='black')
@@ -144,8 +144,8 @@ def set_plot_params_spread(annotationFiles,column,chromosome,length,chromosome_l
 	end_color=colorDictKaryogram[end_coord[column]]
 	start_coord=chromosome.loc[chromosome[1].idxmin()]
 	start_color=colorDictKaryogram[start_coord[column]]
-	w1=Wedge((center_x,y_start-.006),radius,0.0,180.0,facecolor=start_color,edgecolor='black',linewidth=1.5)
-	w2=Wedge((center_x,y_end+.006),radius,180.0,0.0,facecolor=end_color,edgecolor='black',linewidth=1.5)
+	w1=Wedge((center_x,y_start),radius,-90.0,270.0,facecolor=start_color,edgecolor='black',linewidth=1.5)#-.006
+	w2=Wedge((center_x,y_end),radius,-270.0,90.0,facecolor=end_color,edgecolor='black',linewidth=1.5)#+.006
 	ax.add_patch(w1)
 	ax.add_patch(w2)
 	ax.plot([x_start,x_start],[y_start,y_end],ls='-',color='black')
@@ -163,8 +163,8 @@ def set_plot_params_spread(annotationFiles,column,chromosome,length,chromosome_l
 		pdfeatures=get_data(file)
 		pd_chr=pdfeatures.loc[pdfeatures[0]==chromosome_label]
 		number_overlapping_elements = len(pd_chr.index)
-		previous_end_points = 0
-		previous_start_points = 0
+# 		previous_end_points = 0
+# 		previous_start_points = 0
 		for index,point in pd_chr.iterrows():
 			current_height_point=point[2]-point[1]
 			current_height_point_scaled=((y_end-y_start)/chr_size)*current_height_point
@@ -173,13 +173,13 @@ def set_plot_params_spread(annotationFiles,column,chromosome,length,chromosome_l
 			point_color=colorDictAnnotation[point[column]]
 			r=Rectangle(((x_end+annotation_coord),point_scaled_start_coord),.01,current_height_point_scaled,color=point_color)
 			ax.add_patch(r)
-			if ((point_scaled_start_coord.iloc[0]<previous_end_points)|(point_scaled_end_coord.iloc[0]>previous_start_points)):#-0.0002,+0.0002
-				annotation_coord=annotation_coord+(DIM*.015)
-			else:
-				annotation_coord=(DIM*.015)
-			previous_end_points=point_scaled_end_coord.iloc[0]
-			previous_start_points=point_scaled_start_coord.iloc[0]
-# 			annotation_coord =annotation_coord+(DIM*.015) # dense
+# 			if ((point_scaled_start_coord.iloc[0]<previous_end_points)|(point_scaled_end_coord.iloc[0]>previous_start_points)):#-0.0002,+0.0002
+# 				annotation_coord=annotation_coord+(DIM*.015)
+# 			else:
+# 				annotation_coord=(DIM*.015)
+# 			previous_end_points=point_scaled_end_coord.iloc[0]
+# 			previous_start_points=point_scaled_start_coord.iloc[0]
+			annotation_coord =annotation_coord+(DIM*.015) # dense
 	ax.text(x_start,y_end-(DIM*0.07),'{0} - {1} elements'.format(chromosome_label,number_overlapping_elements))
 	collectPatches=[]
 	for key,value in colorDictAnnotation.iteritems():
