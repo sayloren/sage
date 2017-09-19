@@ -32,8 +32,8 @@ def get_args():
 	parser.add_argument("file",type=argparse.FileType('rU'),help='A file containing a list of paths to the files with unique names separated by newlines')
 	# total, or by paragraph https://stackoverflow.com/questions/44288169/parse-text-file-python-and-covert-to-pandas-dataframe
 	parser.add_argument('-s',"--searchstring",type=str,help='if there is a certain string you would like to count, besides the number of commas')
-	parser.add_argument("-n","--numberlongest",type=int,default="6",help='the number of longests sentences to return')
-	parser.add_argument('-i', "--ignorecurlybrackets",action='store_true', help='it you want to ignore information between curly brackets')
+	parser.add_argument("-n","--numberlongest",type=int,default="3",help='the number of longests sentences to return')
+	parser.add_argument('-i', "--ignorebrackets",action='store_true',help='it you want to ignore information between brackets')
 	return parser.parse_args()
 
 # open and read in file
@@ -62,6 +62,16 @@ def split_into_sentences(text):
 
 	text = " " + text + "  "
 	text = text.replace("\n"," ")
+	# does not split the line at decimals such as 5.5
+	text = re.sub(digits + "[.]" + digits,"\\1<prd>\\2",text)
+	# if "e.g." in text
+	text = text.replace("e.g.","e<prd>g<prd>")
+	# if "i.e." in text
+	text = text.replace("i.e.","i<prd>e<prd>")
+	# if "et al." in text
+	text = text.replace("al.","al<prd>")
+	# if a webaddress is present between ()
+	text = re.sub(r'\(https?:\/\/(.*?\))','<webadress>',text,flags=re.MULTILINE) # webaddress within ()
 	text = re.sub(prefixes,"\\1<prd>",text)
 	text = re.sub(websites,"<prd>\\1",text)
 	if "Ph.D" in text: text = text.replace("Ph.D.","Ph<prd>D<prd>")
@@ -80,12 +90,6 @@ def split_into_sentences(text):
 	text = text.replace("?","?<stop>")
 	text = text.replace("!","!<stop>")
 	text = text.replace("<prd>",".")
-	# does not split the line at decimals such as 5.5
-	text = re.sub(digits + "[.]" + digits,"\\1<prd>\\2",text)
-	# if "e.g." in text
-	text = text.replace("e.g.","e<prd>g<prd>")
-	# if "i.e." in text
-	text = text.replace("i.e.","i<prd>e<prd>")
 	sentences = text.split("<stop>")
 	sentences = sentences[:-1]
 	sentences = [s.strip() for s in sentences]
@@ -136,7 +140,7 @@ def main():
 	# get args
 	args = get_args()
 	numberlongest = args.numberlongest
-	ignorecurlybrackets = args.ignorecurlybrackets
+	ignorebrackets = args.ignorebrackets
 	searchstring = args.searchstring
 	infile = [line.strip() for line in args.file]
 	
@@ -145,9 +149,9 @@ def main():
 		readfile = open_and_read(file)
 		
 		# if want to ignore data inside curly brackets
-		if ignorecurlybrackets:
+		if ignorebrackets:
 			readfile = remove_inside_curly_bracket(readfile)
-		
+
 		# split up the sentences
 		splitsentences = split_into_sentences(readfile)
 		
