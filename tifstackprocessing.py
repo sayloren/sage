@@ -56,7 +56,7 @@ def main():
 	# https://docs.opencv.org/2.4.13.4/doc/tutorials/imgproc/table_of_content_imgproc/table_of_content_imgproc.html
 	for name, group in groupsamples:
 		for filename in group['filename']:
-			img = cv2.imread(filename,0)
+			img = cv2.imread(filename,0) # 0 for grayscale
 			equ = cv2.equalizeHist(img)
 			res = np.hstack((img,equ))
 			cv2.imwrite('res.png',res)
@@ -68,6 +68,7 @@ def main():
 # 			cv2.waitKey(0)
 # 			cv2.destroyAllWindows()
 			
+			# https://pypi.python.org/pypi/TiffCapture
 # 			i = tc.opentiff(filename)
 # 			_, first_img = i.retrieve()
 # 			cv2.namedWindow('video')
@@ -79,10 +80,17 @@ def main():
 # 			cv2.destroyWindow(name)
 
 
-	
+	# 2) info 
+		# a) inputs args used; pixel conversion and z step size
 	# 3) imaging processing (contract, edges, hulls)
+		# a) background correction (tiny spots, large spots)
+		# b) smoothing
+		# c) segmentation
 	# 4) locate channel with nucleus, get some info on volume and area
-	# 5) within nucleus, locate signal in other channels, get info (centroid distances, count)
+		# a) label and count nuclei, diameter, stats
+		# b) measure nuclear shape
+	# 5) within nucleus, locate signal in other channels
+		# a) foci diameter, foci count, foci distances, centroids, stats
 	# 6) print some pictures
 	
 if __name__ == "__main__":
