@@ -4,6 +4,18 @@ Script to read in tif stack, do some localization counting, return some stats
 Wren Saylor
 December 2017
 
+Jumana's requests
+Short term ideas/ goals: To simply be able to change simple things like:
+-As you mentioned file names
+-number of channels
+-can compare single copy locus to heterochromatic repeats (intensity: noise threshold will be different, as repeats will always have a higher signal:noise)
+-drosophila cells vs. mammalian cells ( as I mentioned Drosophila cells are quite smaller than mammalian cells)
+
+Long-term goals:To properly assay pairing: 1-spot/2-spot assay- Or what I like to call "the ultimate pairing assay"
+-volume FISH signal to volume of nucleus
+-distance range or 'pairing' distribution between two FISH signals
+-distance in Z as well as X-Y
+-chance of two different FISH targets to 'pair' within the nucleus.
 """
 
 import argparse
