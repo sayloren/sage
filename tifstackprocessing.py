@@ -16,6 +16,23 @@ Long-term goals:To properly assay pairing: 1-spot/2-spot assay- Or what I like t
 -distance range or 'pairing' distribution between two FISH signals
 -distance in Z as well as X-Y
 -chance of two different FISH targets to 'pair' within the nucleus.
+
+Jelena's requests
+a) during import of images:
+-assign channels properly (green is green, red is red, and so on)
+-have settings for each of the microscopes that we use that defines how big is the pixel in microns (e.g. on Zeiss, Niko, Vutara)
+-input images in batches
+-have easy to implement standard naming of input files, or no naming at all (like which z-stack and channel image is)
+
+b) output files:
+-process 3D distances between spots in a Z-stack (center-to-center)
+-output histogram with frequency of cells depending on the micron distance between 2 spots
+-have a way to distinguish if the distance between 2 spots was measured in a cell that only has 2 those two spots, or a cell that has 3, 4 or more spots
+-measure volumen of spots to see if paired spots are bigger than unpaired
+
+c) stats
+-a test to determine if pairing level in one condition is higher than in the other (it could be done with another script, not connected to image processing also)
+
 """
 
 import argparse
