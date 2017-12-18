@@ -86,6 +86,11 @@ def histogram_equalization(image):
 	equalized = cv2.equalizeHist(image)
 	return equalized
 
+def find_contours(image):
+	im2, contours, hierarchy = cv2.findContours(image,cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+	drawing = cv2.drawContours(im2, contours, -1, (0,255,0), 3)
+	return drawing
+
 # horizontally stack before and after images
 def stack_before_and_after_process_images(beforeimage,afterimage):
 	stacked = np.hstack((beforeimage,afterimage))
@@ -100,7 +105,8 @@ def run_equalize_image(filename):
 	image = read_image(filename)
 	gray = convert_grayscale(image)
 	equalized = histogram_equalization(gray)
-	stacked = stack_before_and_after_process_images(gray,equalized)
+	drawing = find_contours(equalized)
+	stacked = stack_before_and_after_process_images(equalized,drawing)
 	save_image(stacked,'test')
 
 def main():
@@ -124,6 +130,8 @@ def main():
 		# read in each filename
 		for filename in dapigroup['filename']:
 			run_equalize_image(filename)
+			# find contours
+			# convex hulls
 	
 	
 	# Equalized hist
@@ -153,6 +161,7 @@ def main():
 	# https://docs.opencv.org/2.4.13.4/doc/tutorials/imgproc/table_of_content_imgproc/table_of_content_imgproc.html
 	# https://mlbernauer.wordpress.com/2014/12/12/statistical-method-for-automated-cell-detection-and-counting/
 	# https://blogs.mathworks.com/steve/2006/06/02/cell-segmentation/
+	# https://stackoverflow.com/questions/7589012/combining-two-images-with-opencv
 
 	# Potential Steps
 	# 2) info 
