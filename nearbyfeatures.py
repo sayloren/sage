@@ -42,18 +42,69 @@ def get_bedtools_features(strFileName):
 	btFeatures = pbt.BedTool(strFileName)
 	return btFeatures
 
-# get stats
-def descriptivestats(btfeature,genomefile):
-# 	coverage = btfeature.genome_coverage(genome=genomefile) # genome coverage, not working yet
-	totalcount = btfeature.count() # total number of features in bedfile
-	
-	
-	
-	# distance to other features in group
-	# size (ave, std, range) - as pd
-	# get relevant info into pd
-	return pdstats
+# convert bedtool to panda
+def convert_bedtools_to_panda(btfeature):
+	pdfeature = pd.read_table(btfeature.fn,header=None)
+	return pdfeature
 
+# label chr start and stop, make size
+def label_coordinate_columns(pdfeature):
+	pdfeature['size'] = pdfeature.loc[:,2].astype(int)-pdfeature.loc[:,1].astype(int)
+	pdfeature.columns.values[0]='chr'
+	pdfeature.columns.values[1]='start'
+	pdfeature.columns.values[2]='end'
+	return pdfeature
+
+# get stats
+def descriptive_stats(pdfeature,column):
+	pdstat = pdfeature[column].describe()
+	return pdstat
+
+# save panda
+def save_panda(pdData,strFilename):
+	pdData.to_csv(strFilename,sep='\t',index=True)
+
+# intersect a file by how many times a feature on b is in the interval
+def intersect_bedfiles_c_true(afile,bfile):
+	intersect = afile.intersect(bfile,c=True)
+	return intersect
+
+def count_number_with_zero_overlaps(df,column):
+	print len(df[(df[column]==0)])
+
+# move elements without any overlaps
+def remove_rows_with_no_overlaps(overlaps,column):
+	pdfeature = overlaps[overlaps[column]!=0]
+	return pdfeature
+
+
+
+
+
+# Question: How many UCEs are there in a domain
+
+# Question: Where in the domain are the UCEs
+
+# Question: What other features characterize domains with UCEs
+
+
+
+
+
+
+
+
+
+
+# map to features
+def coverage_primary_to_secondary(btfeature,queryfeature):
+	featurecov = queryfeature.coverage(btfeature)
+	return featurecov
+
+# get closest
+def primary_to_tertiary_distances(btfeature,queryfeature):
+	featuredis = btfeature.closest(queryfeature,d=True)
+	return featuredis
 
 
 def main():
@@ -71,16 +122,29 @@ def main():
 	
 	print 'running script for {0}'.format(allfiles)
 	
-	# 2) descriptive stats per feature
+	# 2) descriptive stats per feature file
 	for file in allfiles:
-		btfeature = get_bedtools_features(file) # get bed file features
-		btstats = descriptivestats(btfeature,genomefile) # get some stats about each file
-		# collect stats into df
-		# save stats file
+		btfeature = get_bedtools_features(file)
+		pdfeature = convert_bedtools_to_panda(btfeature)
+		pdcoord = label_coordinate_columns(pdfeature)
+		pdstats = descriptive_stats(pdcoord,'size')
 	
+	primary = get_bedtools_features(primaryfile)
 	
-	# 3) get overlaps - secondary; intersect
-	# 4) get nearest - tertiary; closest
+	# 3) get overlaps - secondary
+	for file in secondaryfiles:
+		secondary = get_bedtools_features(file)
+		intersect = intersect_bedfiles_c_true(secondary,primary)
+		pdfeature = convert_bedtools_to_panda(intersect)
+		pdcoord = label_coordinate_columns(pdfeature)
+		pdcoord.columns.values[3]='intersect'
+		count_number_with_zero_overlaps(pdcoord,'intersect')
+		pdclean = remove_rows_with_no_overlaps(pdcoord,'intersect')
+		intersectstats = descriptive_stats(pdclean,'intersect')
+		print intersectstats
+		
+	
+	# 4) get nearest - tertiary
 
 
 
