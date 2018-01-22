@@ -34,15 +34,28 @@ def get_args():
 	parser.add_argument("-b","--binnumber",type=int,default='10',help='number of bins to chunk the secondary files into')
 	return parser.parse_args()
 
-# get bt features
+# 1a,2a) get bt features
 def get_bedtools_features(strFileName):
 	return pbt.BedTool(strFileName)
 
-# convert bedtool to panda
+# 3a) bin secondary regions
+def make_window_with_secondary_files(sfile,bins):
+	windows = pbt.BedTool().window_maker(b=sfile,n=bins)
+	return windows
+
+# 2b,3b) intersect a file by how many times a feature on b is in the interval
+def intersect_bedfiles_c_true(afile,bfile):
+	return afile.intersect(bfile,c=True)
+
+# 3c) intersect files and get original coords and overlap size
+def intersect_bedfiles_wo_true(afile,bfile):
+	return afile.intersect(bfile,wo=True)
+
+# 1b,2c,3d) convert bedtool to panda
 def convert_bedtools_to_panda(btfeature):
 	return pd.read_table(btfeature.fn,header=None)
 
-# 4 cols coord labels
+# 1c,2d) 4 cols coord labels
 def label_coordinate_columns(pdfeature):
 	pdfeature['size'] = pdfeature.loc[:,2].astype(int)-pdfeature.loc[:,1].astype(int)
 	pdfeature.columns.values[0]='chr'
@@ -50,27 +63,24 @@ def label_coordinate_columns(pdfeature):
 	pdfeature.columns.values[2]='end'
 	return pdfeature
 
-# get stats
+# 1d) get stats
 def panda_describe_column(pdfeature,column):
 	return pdfeature[column].describe()
 
-# save panda
-def save_panda(pdData,strFilename):
-	pdData.to_csv(strFilename,sep='\t',index=True)
-
-# intersect a file by how many times a feature on b is in the interval
-def intersect_bedfiles_c_true(afile,bfile):
-	return afile.intersect(bfile,c=True)
-
-# total number of elements without overlaps
+# 2e) total number of elements without overlaps
 def count_number_with_zero_overlaps(df,column):
 	return len(df[(df[column]==0)])
 
-# move elements without any overlaps
+# 3e) 7 cols coord labels
+def label_expanded_coordinate_columns(pdfeature):
+	pdfeature.columns = ['achr','astart','aend','countprimary','bchr','bstart','bend','overlapsize']
+	return pdfeature
+
+# 2f) move elements without any overlaps
 def remove_rows_with_no_overlaps(overlaps,column):
 	return overlaps[overlaps[column]!=0]
 
-# Query: Return some info about the element size stats from file
+# 1) Query: Return some info about the element size stats from file
 def descriptive_stats(file):
 	btfeature = get_bedtools_features(file)
 	pdfeature = convert_bedtools_to_panda(btfeature)
@@ -78,7 +88,7 @@ def descriptive_stats(file):
 	pdstats = panda_describe_column(pdcoord,'size')
 	return pdstats
 
-# Query: How many UCEs are there in a domain
+# 2) Query: How many UCEs are there in a domain
 def overlaping_features(primary,sfile):
 	secondary = get_bedtools_features(sfile)
 	intersect = intersect_bedfiles_c_true(secondary,primary)
@@ -89,54 +99,26 @@ def overlaping_features(primary,sfile):
 	pdclean = remove_rows_with_no_overlaps(pdcoord,'intersect')
 	return secondary,pdclean,nooverlaps
 
-# intersect files and get original coords and overlap size
-def intersect_bedfiles_wo_true(afile,bfile):
-	return afile.intersect(bfile,wo=True)
-
-# 7 cols coord labels
-def label_expanded_coordinate_columns(pdfeature):
-	pdfeature.columns = ['achr','astart','aend','countprimary','bchr','bstart','bend','overlapsize']
-	return pdfeature
-
-# bin secondary regions
-def make_window_with_secondary_files(sfile,bins):
-	windows = pbt.BedTool().window_maker(b=sfile,n=bins)
-	return windows
-
-# Query: Where in the domain are the UCEs
+# 3) Query: Where in the domain are the UCEs
 def locateing_features(primary,sfile,bins):
 	windows = make_window_with_secondary_files(sfile,bins)
 	intersectprimary = intersect_bedfiles_c_true(windows,primary)
 	intersectsecondary = intersect_bedfiles_wo_true(intersectprimary,sfile)
 	pdfeature = convert_bedtools_to_panda(intersectsecondary)
 	pdcoord = label_expanded_coordinate_columns(pdfeature)
-	
 
-# make columns for distance between element and each boundary
-# def get_boundary_distances(pdfeature):
-# 	pdfeature['enddistance'] = pdfeature['bend']-pdfeature['aend']
-# 	pdfeature['startdistance'] = pdfeature['bstart']-pdfeature['astart']
-# 	return pdfeature
-# determine which boundary distance is further
-# def binary_boundary_distances(pdfeature,bins):
-# 	pdfeature['closerboundary'] = np.where((pdfeature['startdistance'] >= pdfeature['enddistance']),'start','end')
-# 	collectBins = []
-# 	step = 1
-# 	start, end = 0, bins
-# 	while end < bins:
-# 		current = element[start:end]
-# 		percentage = count
-# 		collectBins.append(percentage)
-# 		start, end = start+step, end+step
-# 	return collectBins
 
-# Query: What other features characterize domains with UCEs
+# 4) Query: What other features characterize domains with UCEs
 def additional_features(secondary,sclean,tfile):
 	tertiary = get_bedtools_features(tfile)
 	intersect = intersect_bedfiles_c_true(secondary,tertiary)
 	pdfeature = convert_bedtools_to_panda(intersect)
 	pdcoord = label_coordinate_columns(pdfeature)
 	pdcoord.columns.values[3]='intersect'
+
+# save panda
+def save_panda(pdData,strFilename):
+	pdData.to_csv(strFilename,sep='\t',index=True)
 
 def main():
 	args = get_args()
