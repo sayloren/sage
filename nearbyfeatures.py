@@ -95,7 +95,7 @@ def intersect_bedfiles_wo_true(afile,bfile):
 
 # 7 cols coord labels
 def label_expanded_coordinate_columns(pdfeature):
-	pdfeature.columns = ['achr','astart','aend','bchr','bstart','bend','overlapsize']
+	pdfeature.columns = ['achr','astart','aend','countprimary','bchr','bstart','bend','overlapsize']
 	return pdfeature
 
 # bin secondary regions
@@ -106,11 +106,12 @@ def make_window_with_secondary_files(sfile,bins):
 # Query: Where in the domain are the UCEs
 def locateing_features(primary,sfile,bins):
 	windows = make_window_with_secondary_files(sfile,bins)
+	intersectprimary = intersect_bedfiles_c_true(windows,primary)
+	intersectsecondary = intersect_bedfiles_wo_true(intersectprimary,sfile)
+	pdfeature = convert_bedtools_to_panda(intersectsecondary)
+	pdcoord = label_expanded_coordinate_columns(pdfeature)
 	
-	
-# 	intersect = intersect_bedfiles_wo_true(primary,file)
-# 	pdfeature = convert_bedtools_to_panda(intersect)
-# 	pdcoord = label_expanded_coordinate_columns(pdfeature)
+
 # make columns for distance between element and each boundary
 # def get_boundary_distances(pdfeature):
 # 	pdfeature['enddistance'] = pdfeature['bend']-pdfeature['aend']
