@@ -148,6 +148,11 @@ def additional_features_locate(secondary,tertiary,tfile,scoord,windows):
 	pdgroup = group_df_by_secondary_regions(concatintersect)
 	return pdgroup
 
+# 6a) remove the rows where there are no primary element overlaps with the secondary regions
+def drop_primary_zero_list(pdfeatures):
+	thresh = pdfeatures[~pdfeatures['bincounts_count_primary'].apply(lambda row: all(item ==0 for item in row))]
+	return thresh
+
 
 def main():
 	args = get_args()
@@ -195,6 +200,9 @@ def main():
 			
 			allstats = pd.concat([intersectstats,primarystats,tertiarystats],axis=1)
 			save_panda(allstats,'stats_{0}_intersections.txt'.format(primaryfile))
+			
+			# 6) generate graph for bin results
+			drop_primary_zero_list(groupfeatures)
 			
 
 if __name__ == "__main__":
