@@ -34,28 +34,28 @@ def get_args():
 	parser.add_argument("-b","--binnumber",type=int,default='10',help='number of bins to chunk the secondary files into')
 	return parser.parse_args()
 
-# 1a,2a) get bt features
+# 1a,3a) get bt features
 def get_bedtools_features(strFileName):
 	return pbt.BedTool(strFileName)
 
-# 3a) bin secondary regions
+# 2a) bin secondary regions
 def make_window_with_secondary_files(sfile,bins):
 	windows = pbt.BedTool().window_maker(b=sfile,n=bins)
 	return windows
 
-# 2b,3b) intersect a file by how many times a feature on b is in the interval
+# 1b,2b,3b,4a) intersect a file by how many times a feature on b is in the interval
 def intersect_bedfiles_c_true(afile,bfile):
 	return afile.intersect(bfile,c=True)
 
-# 3c) intersect files and get original coords and overlap size
+# 2c,4b) intersect files and get original coords and overlap size
 def intersect_bedfiles_wo_true(afile,bfile):
 	return afile.intersect(bfile,wo=True)
 
-# 1b,2c,3d) convert bedtool to panda
+# 1c,2d,3c,4c) convert bedtool to panda
 def convert_bedtools_to_panda(btfeature):
 	return pd.read_table(btfeature.fn,header=None)
 
-# 1c,2d) 4 cols coord labels
+# 1d,3d) 4 cols coord labels
 def label_coordinate_columns(pdfeature):
 	pdfeature['size'] = pdfeature.loc[:,2].astype(int)-pdfeature.loc[:,1].astype(int)
 	pdfeature.columns.values[0]='chr'
@@ -63,62 +63,81 @@ def label_coordinate_columns(pdfeature):
 	pdfeature.columns.values[2]='end'
 	return pdfeature
 
-# 1d) get stats
+# 2e,4d) 7 cols coord labels
+def label_expanded_coordinate_columns(pdfeature):
+	pdfeature.columns = ['achr','astart','aend','countfeature','bchr','bstart','bend','overlapsize']
+	return pdfeature
+
+# groupby larger region
+def group_df_by_secondary_regions(pdfeature):
+# 	grouped = pdfeature.groupby(['bchr','bstart','bend'])['count_primary'].apply(list)
+	countcolumns = [col for col in pdfeature.columns if 'count' in col]
+	outgroup = []
+	for col in countcolumns:
+		group = pdfeature.groupby(['bchr','bstart','bend'])[col].apply(list)
+		outgroup.append(group)
+	grouped = pd.concat(outgroup)
+	print grouped
+	return grouped
+
+
+
+
+# get stats
 def panda_describe_column(pdfeature,column):
 	return pdfeature[column].describe()
 
-# 2e) total number of elements without overlaps
+# total number of elements without overlaps
 def count_number_with_zero_overlaps(df,column):
 	return len(df[(df[column]==0)])
 
-# 3e) 7 cols coord labels
-def label_expanded_coordinate_columns(pdfeature):
-	pdfeature.columns = ['achr','astart','aend','countprimary','bchr','bstart','bend','overlapsize']
-	return pdfeature
-
-# 2f) move elements without any overlaps
+# move elements without any overlaps
 def remove_rows_with_no_overlaps(overlaps,column):
 	return overlaps[overlaps[column]!=0]
 
-# 1) Query: Return some info about the element size stats from file
-def descriptive_stats(file):
-	btfeature = get_bedtools_features(file)
-	pdfeature = convert_bedtools_to_panda(btfeature)
-	pdcoord = label_coordinate_columns(pdfeature)
-	pdstats = panda_describe_column(pdcoord,'size')
-	return pdstats
+# save panda
+def save_panda(pdData,strFilename):
+	pdData.to_csv(strFilename,sep='\t',index=True)
 
-# 2) Query: How many UCEs are there in a domain
+# 1) Query: How many UCEs are there in a domain
 def overlaping_features(primary,sfile):
 	secondary = get_bedtools_features(sfile)
 	intersect = intersect_bedfiles_c_true(secondary,primary)
 	pdfeature = convert_bedtools_to_panda(intersect)
 	pdcoord = label_coordinate_columns(pdfeature)
-	pdcoord.columns.values[3]='intersect'
-	nooverlaps = count_number_with_zero_overlaps(pdcoord,'intersect')
-	pdclean = remove_rows_with_no_overlaps(pdcoord,'intersect')
-	return secondary,pdclean,nooverlaps
+	pdcoord.columns.values[3]='intersect_primary'
+	return secondary,pdcoord
 
-# 3) Query: Where in the domain are the UCEs
+# 2) Query: Where in the domain are the UCEs
 def locateing_features(primary,sfile,bins):
 	windows = make_window_with_secondary_files(sfile,bins)
 	intersectprimary = intersect_bedfiles_c_true(windows,primary)
 	intersectsecondary = intersect_bedfiles_wo_true(intersectprimary,sfile)
 	pdfeature = convert_bedtools_to_panda(intersectsecondary)
 	pdcoord = label_expanded_coordinate_columns(pdfeature)
+	pdcoord.rename(columns={'countfeature':'count_primary'},inplace=True)
+# 	pdgroup = group_df_by_secondary_regions(pdcoord)
+	return pdcoord,windows
 
-
-# 4) Query: What other features characterize domains with UCEs
-def additional_features(secondary,sclean,tfile):
+# 3) Query: What other features characterize domains with UCEs; in a domain
+def additional_features_overlap(secondary,scoord,tfile):
 	tertiary = get_bedtools_features(tfile)
 	intersect = intersect_bedfiles_c_true(secondary,tertiary)
 	pdfeature = convert_bedtools_to_panda(intersect)
-	pdcoord = label_coordinate_columns(pdfeature)
-	pdcoord.columns.values[3]='intersect'
+	tcoord = label_coordinate_columns(pdfeature)
+	tcoord.columns.values[3]='intersect_{0}'.format(tfile)
+	concatintersect = pd.merge(scoord,tcoord,how='inner',on=['chr','start','end','size'])
+	return tertiary,concatintersect
 
-# save panda
-def save_panda(pdData,strFilename):
-	pdData.to_csv(strFilename,sep='\t',index=True)
+# 4) Query: What other features characterize domains with UCEs; where in domain
+def additional_features_locate(secondary,tertiary,tfile,scoord,windows):
+	intersecttertiary = intersect_bedfiles_c_true(windows,tertiary)
+	intersectsecondary = intersect_bedfiles_wo_true(intersecttertiary,secondary)
+	pdfeature = convert_bedtools_to_panda(intersectsecondary)
+	tcoord = label_expanded_coordinate_columns(pdfeature)
+	tcoord.rename(columns={'countfeature':'count_{0}'.format(tfile)},inplace=True)
+	concatintersect = pd.merge(scoord,tcoord,how='inner',on=['achr','astart','aend','bchr','bstart','bend'])
+	pdgroup = group_df_by_secondary_regions(concatintersect)
 
 def main():
 	args = get_args()
@@ -130,29 +149,25 @@ def main():
 	bins = args.binnumber
 	genomefile = args.genomefile
 	
+	# make list of all files to iterate through
 	allfiles = secondaryfiles + tertiaryfiles
 	allfiles.insert(0,primaryfile)
 	
-	print 'running script with files: {0}'.format(allfiles)
-	
-	# run descriptive stats per feature file
-	for file in allfiles:
-		pdstats = descriptive_stats(file)
-		print 'feature stats on element sizes for {0}'.format(file)
-		print pdstats # make into df
-
 	primary = get_bedtools_features(primaryfile)
 	
 	# process feature files
 	for sfile in secondaryfiles:
-		secondary,sclean,nooverlaps = overlaping_features(primary,sfile)
-		print '{0} instances of no overlaps on {1}'.format(nooverlaps,sfile)
-		print 'feature overlap stats on {0}'.format(sfile)
-		intersectstats = panda_describe_column(sclean,'intersect')
-		print intersectstats # make into df
-		locateing_features(primary,sfile,bins)
+		secondary,scoord = overlaping_features(primary,sfile)
+		binfeatures,windows = locateing_features(primary,sfile,bins)
 		for tfile in tertiaryfiles:
-			additional_features(secondary,sclean,tfile)
+			tertiary,intersect = additional_features_overlap(secondary,scoord,tfile)
+			additional_features_locate(secondary,tertiary,tfile,binfeatures,windows)
+#			return some stats from file; size, intersections by type
+# 			intersectstats = panda_describe_column(coords,['size','intersect_primary','intersect...types'])
+# 			nooverlaps = count_number_with_zero_overlaps(intersect,'intersect_primary')
+# 			print '{0} instances of no overlaps on {1}'.format(nooverlaps,sfile)
+# 			pdclean = remove_rows_with_no_overlaps(intersect,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
+			
 
 if __name__ == "__main__":
 	main()
