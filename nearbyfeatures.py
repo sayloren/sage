@@ -28,6 +28,7 @@ import matplotlib.patches as patches
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+from itertools import cycle
 
 # set args
 def get_args():
@@ -159,7 +160,7 @@ def drop_primary_zero_list(pdfeatures):
 	return thresh
 
 # 6b) format the binned data frame for easy graphing
-def format_binned_data_for_graphing(pdfeatures):
+def format_binned_data_for_graphing(pdfeatures,bins):
 	selectcols = [col for col in pdfeatures.columns if 'bincounts' in col]
 	list = []
 	for group in selectcols:
@@ -169,12 +170,16 @@ def format_binned_data_for_graphing(pdfeatures):
 		list.append(sum)
 	concat = pd.concat(list,axis=1)
 	concat.columns = [selectcols]
-	return concat
+	bincolumns = range(bins)
+	format = pd.melt(concat)
+	format.columns = ['filename','sumbin']
+	format['bin'] = bincolumns * (format.shape[0]/len(bincolumns))
+	return format
 
 # 6d) graph binned data
 def graph_binned_regions(pdfeatures,primaryfile,sfile):
 	sns.set_style('ticks')
-	pp = PdfPages('bincounts_{0}.pdf'.format(primaryfile))
+	pp = PdfPages('bincounts_{0}_{1}.pdf'.format(primaryfile,sfile))
 	plt.figure(figsize=(14,7))
 	
 	gs = gridspec.GridSpec(1,1,height_ratios=[1])
@@ -182,13 +187,10 @@ def graph_binned_regions(pdfeatures,primaryfile,sfile):
 	
 	ax0 = plt.subplot(gs[0,:])
 	
-	barfeatures = [col for col in pdfeatures.columns if 'bincounts' in col]
-	pdfeatures[barfeatures].applymap(lambda x: x[0]).plot.bar(rot=0, color=list('br'))
-	print pdfeatures
+	sns.barplot(data=pdfeatures,x='bin',y='sumbin',hue='filename')
+	
 	ax0.set_ylabel('Counts for {0}'.format(sfile),size=16)
 	ax0.tick_params(axis='both',which='major',labelsize=16)
-
-	# still have to make a new graph for each set...
 
 	sns.despine()
 	pp.savefig()
@@ -243,7 +245,7 @@ def main():
 			
 			# 6) generate graph for bin results
 			cleanbin = drop_primary_zero_list(groupfeatures)
-			formatbin = format_binned_data_for_graphing(cleanbin)
+			formatbin = format_binned_data_for_graphing(cleanbin,bins)
 			graph_binned_regions(formatbin,primaryfile,sfile)
 
 if __name__ == "__main__":
