@@ -34,7 +34,7 @@ from itertools import cycle
 def get_args():
 	parser = argparse.ArgumentParser(description="Description")
 	parser.add_argument("file",type=str,help='the primary element file') # UCEs
-	parser.add_argument("-s","--secondaryfeatures",type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
+	parser.add_argument("-s","--secondaryfeatures",required=True,type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
 	parser.add_argument("-t","--tertiaryfeatures",type=argparse.FileType('rU'),help="a file with a list of file names with the tertiary features to query")# Genes
 	parser.add_argument("-g","--genomefile",type=str,help="genome file",default='hg19.genome')
 	parser.add_argument("-b","--binnumber",type=int,default='10',help='number of bins to chunk the secondary files into')
@@ -182,6 +182,9 @@ def graph_binned_regions(pdfeatures,primaryfile,sfile):
 	pp = PdfPages('bincounts_{0}_{1}.pdf'.format(primaryfile,sfile))
 	plt.figure(figsize=(14,7))
 	
+	unique = len(pdfeatures['filename'].unique())
+	sns.set_palette("Blues",n_colors=unique)
+	
 	gs = gridspec.GridSpec(1,1,height_ratios=[1])
 	gs.update(hspace=.8)
 	
@@ -230,16 +233,16 @@ def main():
 			# 5) generate stats results
 			primarystats = panda_describe_single_column(primary,'size_primary')
 			tertiarystats = panda_describe_single_column(tertiary,'size_{0}'.format(tfile))
-			
+		
 			nooverlaps = count_number_with_zero_overlaps(intersect,'intersect_primary')
 			print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
-			
+		
 			cleanintersect = remove_rows_with_no_overlaps(intersect,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
 			cleanintersect.rename(columns={'size_x':'size_{0}'.format(sfile)},inplace=True)
 			cleanintersect.drop(columns=['size_y'],inplace=True)
 			
 			intersectstats = panda_describe_multiple_column(cleanintersect)
-			
+		
 			allstats = pd.concat([intersectstats,primarystats,tertiarystats],axis=1)
 			save_panda(allstats,'stats_{0}_intersections.txt'.format(primaryfile))
 			
