@@ -19,6 +19,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+Outputs:
+File with stats about (by appearance in column labels):
+	-intersect between primary overlaping with secondary
+	-intersect between tertiary overlapping secondary
+	-size of the secondary regions
+	-size of the primary region
+	-size of the tertiary region
+Bar plot for each secondary file grouped with primary and tertiary files by which bin in the seconary they fall
+
 """
 import argparse
 import pandas as pd
