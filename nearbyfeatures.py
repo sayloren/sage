@@ -23,6 +23,11 @@ limitations under the License.
 import argparse
 import pandas as pd
 import pybedtools as pbt
+import matplotlib.gridspec as gridspec
+import matplotlib.patches as patches
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 
 # set args
 def get_args():
@@ -108,7 +113,7 @@ def panda_describe_multiple_column(pdfeature):
 def save_panda(pdData,strFilename):
 	pdData.to_csv(strFilename,sep='\t',index=True,mode='a')
 
-# 1) Query: How many UCEs are there in a domain
+# 1) Query: How many UCEs are there in a domain 
 def overlaping_features(primary,sfile):
 	secondary = get_bedtools_features(sfile)
 	intersect = intersect_bedfiles_c_true(secondary,primary)
@@ -153,6 +158,41 @@ def drop_primary_zero_list(pdfeatures):
 	thresh = pdfeatures[~pdfeatures['bincounts_count_primary'].apply(lambda row: all(item ==0 for item in row))]
 	return thresh
 
+# 6b) format the binned data frame for easy graphing
+def format_binned_data_for_graphing(pdfeatures):
+	selectcols = [col for col in pdfeatures.columns if 'bincounts' in col]
+	list = []
+	for group in selectcols:
+		subset = pdfeatures[[group]]
+		split = pd.DataFrame(subset[group].values.tolist())
+		sum = split.sum(axis=0)
+		list.append(sum)
+	concat = pd.concat(list,axis=1)
+	concat.columns = [selectcols]
+	return concat
+
+# 6d) graph binned data
+def graph_binned_regions(pdfeatures,primaryfile,sfile):
+	sns.set_style('ticks')
+	pp = PdfPages('bincounts_{0}.pdf'.format(primaryfile))
+	plt.figure(figsize=(14,7))
+	
+	gs = gridspec.GridSpec(1,1,height_ratios=[1])
+	gs.update(hspace=.8)
+	
+	ax0 = plt.subplot(gs[0,:])
+	
+	barfeatures = [col for col in pdfeatures.columns if 'bincounts' in col]
+	pdfeatures[barfeatures].applymap(lambda x: x[0]).plot.bar(rot=0, color=list('br'))
+	print pdfeatures
+	ax0.set_ylabel('Counts for {0}'.format(sfile),size=16)
+	ax0.tick_params(axis='both',which='major',labelsize=16)
+
+	# still have to make a new graph for each set...
+
+	sns.despine()
+	pp.savefig()
+	pp.close()
 
 def main():
 	args = get_args()
@@ -192,18 +232,19 @@ def main():
 			nooverlaps = count_number_with_zero_overlaps(intersect,'intersect_primary')
 			print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
 			
-			clean = remove_rows_with_no_overlaps(intersect,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
-			clean.rename(columns={'size_x':'size_{0}'.format(sfile)},inplace=True)
-			clean.drop(columns=['size_y'],inplace=True)
+			cleanintersect = remove_rows_with_no_overlaps(intersect,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
+			cleanintersect.rename(columns={'size_x':'size_{0}'.format(sfile)},inplace=True)
+			cleanintersect.drop(columns=['size_y'],inplace=True)
 			
-			intersectstats = panda_describe_multiple_column(clean)
+			intersectstats = panda_describe_multiple_column(cleanintersect)
 			
 			allstats = pd.concat([intersectstats,primarystats,tertiarystats],axis=1)
 			save_panda(allstats,'stats_{0}_intersections.txt'.format(primaryfile))
 			
 			# 6) generate graph for bin results
-			drop_primary_zero_list(groupfeatures)
-			
+			cleanbin = drop_primary_zero_list(groupfeatures)
+			formatbin = format_binned_data_for_graphing(cleanbin)
+			graph_binned_regions(formatbin,primaryfile,sfile)
 
 if __name__ == "__main__":
 	main()
