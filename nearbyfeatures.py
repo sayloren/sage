@@ -38,6 +38,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from itertools import cycle
+import matplotlib
 
 # set args
 def get_args():
@@ -46,7 +47,7 @@ def get_args():
 	parser.add_argument("-s","--secondaryfeatures",required=True,type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
 	parser.add_argument("-t","--tertiaryfeatures",type=argparse.FileType('rU'),help="a file with a list of file names with the tertiary features to query")# Genes
 	parser.add_argument("-g","--genomefile",type=str,help="genome file",default='hg19.genome')
-	parser.add_argument("-b","--binnumber",type=int,default='10',help='number of bins to chunk the secondary files into')
+	parser.add_argument("-b","--binnumber",type=int,default='10',help='number of bins to chunk the secondary files into, must be even number')
 	return parser.parse_args()
 
 # 1a,3a) get bt features
@@ -168,7 +169,12 @@ def drop_primary_zero_list(pdfeatures):
 	thresh = pdfeatures[~pdfeatures['bincounts_count_primary'].apply(lambda row: all(item ==0 for item in row))]
 	return thresh
 
-# 6b) format the binned data frame for easy graphing
+# 6b) keep only those rows where there are no primary element overlaps with the secondary regions
+def keep_primary_zero_list(pdfeatures):
+	thresh = pdfeatures[pdfeatures['bincounts_count_primary'].apply(lambda row: all(item ==0 for item in row))]
+	return thresh
+
+# 6c) format the binned data frame for easy graphing
 def format_binned_data_for_graphing(pdfeatures,bins):
 	selectcols = [col for col in pdfeatures.columns if 'bincounts' in col]
 	list = []
@@ -185,8 +191,18 @@ def format_binned_data_for_graphing(pdfeatures,bins):
 	format['bin'] = bincolumns * (format.shape[0]/len(bincolumns))
 	return format
 
-# 6d) graph binned data
-def graph_binned_regions(pdfeatures,primaryfile,sfile):
+# 6d) fold data set
+def fold_formated_binned_data(pdfeatures,bins):
+	halfbin = bins/2
+	pdfeatures['invertsumbin'] = pdfeatures['sumbin'].iloc[::-1].reset_index(drop=True)
+	pdfeatures['sumsums'] = pdfeatures['invertsumbin'] + pdfeatures['sumbin']
+	headfeatures = pdfeatures.head(n=halfbin)
+	dropfeatures = headfeatures[['filename','sumsums','bin']]
+	dropfeatures.columns = ['filename','sumbin','bin']
+	return dropfeatures
+
+# 6ei) depreciated graph binned data
+def graph_binned_regions(pdfeatures,nofeatures,primaryfile,sfile):
 	sns.set_style('ticks')
 	pp = PdfPages('bincounts_{0}_{1}.pdf'.format(primaryfile,sfile))
 	plt.figure(figsize=(14,7))
@@ -194,16 +210,45 @@ def graph_binned_regions(pdfeatures,primaryfile,sfile):
 	unique = len(pdfeatures['filename'].unique())
 	sns.set_palette("Blues",n_colors=unique)
 	
-	gs = gridspec.GridSpec(1,1,height_ratios=[1])
+	gs = gridspec.GridSpec(2,1)
 	gs.update(hspace=.8)
 	
-	ax0 = plt.subplot(gs[0,:])
-	
+	ax0 = plt.subplot(gs[0,0])
 	sns.barplot(data=pdfeatures,x='bin',y='sumbin',hue='filename')
-	
 	ax0.set_ylabel('Counts for {0}'.format(sfile),size=16)
 	ax0.tick_params(axis='both',which='major',labelsize=16)
+	ax0.set_title('With Primary Elements',size=8)
+	
+	ax1 = plt.subplot(gs[1,0])
+	sns.barplot(data=nofeatures,x='bin',y='sumbin',hue='filename')
+	ax1.set_ylabel('Counts for {0}'.format(sfile),size=16)
+	ax1.tick_params(axis='both',which='major',labelsize=16)
+	ax1.set_title('Without Primary Elements',size=8)
 
+	sns.despine()
+	pp.savefig()
+	pp.close()
+
+# 6eii) line graph binned data with no tertiary features
+def graph_binned_regions_no_tertiary(pdfeatures,primaryfile,sfile):
+	sns.set_style('ticks')
+	pp = PdfPages('bincounts_{0}_{1}.pdf'.format(primaryfile,sfile))
+	plt.figure(figsize=(14,7))
+	
+	unique = len(pdfeatures['filename'].unique())
+	sns.set_palette("Blues",n_colors=unique)
+	
+	gs = gridspec.GridSpec(1,1)
+	gs.update(hspace=.8)
+	
+	ax0 = plt.subplot(gs[0,0])
+	sns.pointplot(data=pdfeatures,x='bin',y='sumbin',color='#9ecae1',scale=3)
+	ax0.set_ylabel('Count Frequency')
+	ax0.set_xlabel('Bin Distance from Edge')
+# 	ax0.tick_params(axis='both',which='major',labelsize=16)
+	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
+		item.set_fontsize(22)
+	
 	sns.despine()
 	pp.savefig()
 	pp.close()
@@ -224,41 +269,90 @@ def main():
 	
 	primary = get_bedtools_features(primaryfile)
 	
+	lumpsecondaryfiles = []
 	# process feature files
 	for sfile in secondaryfiles:
 		# 1) Query: How many UCEs are there in a domain
 		secondary,scoord = overlaping_features(primary,sfile)
 		
+		# get the number of secondary features with no primary overlaps
+		nooverlaps = count_number_with_zero_overlaps(scoord,'intersect_primary')
+		print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
+		
+		# remove all secondary regions with no primary overlaps
+		cleanintersect = remove_rows_with_no_overlaps(scoord,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
+		
+		# make stats file
+		intersectstats = panda_describe_multiple_column(cleanintersect)
+		primarystats = panda_describe_single_column(primary,'size_primary')
+		intersectstats.rename(columns={'size':'size_{0}'.format(sfile)},inplace=True)
+		allstats = pd.concat([intersectstats,primarystats],axis=1)
+		save_panda(allstats,'stats_{0}_intersections.txt'.format(primaryfile))
+
 		# 2) Query: Where in the domain are the UCEs
 		binfeatures,windows = locateing_features(primary,sfile,bins)
 		
-		for tfile in tertiaryfiles:
-			# 3) Query: What other features characterize domains with UCEs; in a domain
-			tertiary,intersect = additional_features_overlap(secondary,scoord,tfile)
-			
-			# 4) Query: What other features characterize domains with UCEs; where in domain
-			groupfeatures = additional_features_locate(secondary,tertiary,tfile,binfeatures,windows)
-			
-			# 5) generate stats results
-			primarystats = panda_describe_single_column(primary,'size_primary')
-			tertiarystats = panda_describe_single_column(tertiary,'size_{0}'.format(tfile))
+		# group bin counts by secondary features they came from
+		groupfeatures = group_df_by_secondary_regions(binfeatures)
 		
-			nooverlaps = count_number_with_zero_overlaps(intersect,'intersect_primary')
-			print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
 		
-			cleanintersect = remove_rows_with_no_overlaps(intersect,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
-			cleanintersect.rename(columns={'size_x':'size_{0}'.format(sfile)},inplace=True)
-			cleanintersect.drop(columns=['size_y'],inplace=True)
-			
-			intersectstats = panda_describe_multiple_column(cleanintersect)
+		# 6) generate graph for bin results
+		cleanbin = drop_primary_zero_list(groupfeatures)
+		formatbin = format_binned_data_for_graphing(cleanbin,bins)
 		
-			allstats = pd.concat([intersectstats,primarystats,tertiarystats],axis=1)
-			save_panda(allstats,'stats_{0}_intersections.txt'.format(primaryfile))
-			
-			# 6) generate graph for bin results
-			cleanbin = drop_primary_zero_list(groupfeatures)
-			formatbin = format_binned_data_for_graphing(cleanbin,bins)
-			graph_binned_regions(formatbin,primaryfile,sfile)
+# 		print 'counts for {0} over {1} bins in {2}'.format(primaryfile,bins,sfile)
+# 		print formatbin
+		
+		foldbin = fold_formated_binned_data(formatbin,bins)
+		
+		# graph binned regions
+		graph_binned_regions_no_tertiary(foldbin,primaryfile,sfile)
+		
+		lumpsecondaryfiles.append(cleanintersect)
+	concatsecondary = pd.concat(lumpsecondaryfiles)
+	concatsecondary.rename(columns={'size':'size_all_secondary'},inplace=True)
+	catsecondarystats = panda_describe_multiple_column(concatsecondary)
+	save_panda(catsecondarystats,'stats_{0}_intersections.txt'.format(primaryfile))
+		
+		
+		
+		# back up with tertiary files
+# 		for tfile in tertiaryfiles:
+# 			# 3) Query: What other features characterize domains with UCEs; in a domain
+# 			tertiary,intersect = additional_features_overlap(secondary,scoord,tfile)
+# 			
+# 			print 'intersect data frame'
+# 			print intersect
+# 			
+# 			# 4) Query: What other features characterize domains with UCEs; where in domain
+# 			groupfeatures = additional_features_locate(secondary,tertiary,tfile,binfeatures,windows)
+# 			
+# 			print 'groupfeatures data frame'
+# 			print groupfeatures
+# 			
+# 			# 5) generate stats results
+# 			primarystats = panda_describe_single_column(primary,'size_primary')
+# 			tertiarystats = panda_describe_single_column(tertiary,'size_{0}'.format(tfile))
+# 		
+# 			nooverlaps = count_number_with_zero_overlaps(intersect,'intersect_primary')
+# 			print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
+# 		
+# 			cleanintersect = remove_rows_with_no_overlaps(intersect,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
+# 			cleanintersect.rename(columns={'size_x':'size_{0}'.format(sfile)},inplace=True)
+# 			cleanintersect.drop(columns=['size_y'],inplace=True)
+# 			
+# 			intersectstats = panda_describe_multiple_column(cleanintersect)
+# 		
+# 			allstats = pd.concat([intersectstats,primarystats,tertiarystats],axis=1)
+# 			save_panda(allstats,'stats_{0}_intersections.txt'.format(primaryfile))
+# 			
+# 			# 6) generate graph for bin results
+# 			cleanbin = drop_primary_zero_list(groupfeatures)
+# 			cleanformatbin = format_binned_data_for_graphing(cleanbin,bins)
+# 			dirtybin = keep_primary_zero_list(groupfeatures)
+# 			dirtyformatbin = format_binned_data_for_graphing(dirtybin,bins)
+# 			
+# 			graph_binned_regions(cleanformatbin,dirtyformatbin,primaryfile,sfile)
 
 if __name__ == "__main__":
 	main()
