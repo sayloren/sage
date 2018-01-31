@@ -46,6 +46,7 @@ def get_args():
 	parser.add_argument("file",type=str,help='the primary element file') # UCEs
 	parser.add_argument("-s","--secondaryfeatures",required=True,type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
 	parser.add_argument("-t","--tertiaryfeatures",type=argparse.FileType('rU'),help="a file with a list of file names with the tertiary features to query")# Genes
+	parser.add_argument("-q","--quinaryfeatures",type=argparse.FileType('rU'),help="a file with a list of file names with the quinary features to query")# Mouse UCEs
 	parser.add_argument("-g","--genomefile",type=str,help="genome file",default='hg19.genome')
 	parser.add_argument("-b","--binnumber",type=int,default='10',help='number of bins to chunk the secondary files into, must be even number')
 	return parser.parse_args()
@@ -56,7 +57,7 @@ def get_bedtools_features(strFileName):
 
 # 2a) bin secondary regions
 def make_window_with_secondary_files(sfile,bins):
-	windows = pbt.BedTool().window_maker(b=sfile,n=bins)
+	windows = pbt.BedTool().window_maker(b=sfile,n=bins,i="src")
 	return windows
 
 # 1b,2b,3b,4a) intersect a file by how many times a feature on b is in the interval
@@ -131,13 +132,30 @@ def overlaping_features(primary,sfile):
 	pdfeature = convert_bedtools_to_panda(intersect)
 	pdcoord = label_coordinate_columns(pdfeature)
 	pdcoord.columns.values[3]='intersect_primary'
+	pdcoord.insert(len(pdcoord.columns),'id',range(0,0+len(pdcoord)))
 	return secondary,pdcoord
+
+# save file from bedtool
+def save_bedtool_as_bedfile(btObject,strFilename):
+	btObject.saveas(strFilename)
+
+# convert bedtool to panda
+# If there is nothing in the btobject, will it read the data from the previous itteration!?
+def convert_bedtool_to_panda(btobject):
+	save_bedtool_as_bedfile(btobject,'temp.bed')
+	pdObject = pd.read_table(btobject.fn, header=None)
+	return pdObject
 
 # 2) Query: Where in the domain are the UCEs
 def locateing_features(primary,sfile,bins):
+	print sfile
 	windows = make_window_with_secondary_files(sfile,bins)
+	print windows
 	intersectprimary = intersect_bedfiles_c_true(windows,primary)
+
+	# this is where rao is having trouble: the domains are redundant - have to have an id to merge on
 	intersectsecondary = intersect_bedfiles_wo_true(intersectprimary,sfile)
+	
 	pdfeature = convert_bedtools_to_panda(intersectsecondary)
 	pdcoord = label_expanded_coordinate_columns(pdfeature)
 	pdcoord.rename(columns={'countfeature':'count_primary'},inplace=True)
@@ -201,8 +219,8 @@ def fold_formated_binned_data(pdfeatures,bins):
 	dropfeatures.columns = ['filename','sumbin','bin']
 	return dropfeatures
 
-# 6ei) graph box plots for secondary and tertiary data
-def graph_boxplot_region_size(pdfeatures,primaryfile,sfile,tfile):
+# 6ei) graph box plots for secondary and tertiary data - will have to put in the y axis label as arg
+def graph_boxplot_region_size(pdfeatures,primaryfile,sfile,tfile,ylabeltext):
 	sns.set_style('ticks')
 	pp = PdfPages('tertiarycount_{0}_{1}_{2}.pdf'.format(primaryfile,sfile,tfile))
 	plt.figure(figsize=(14,7))
@@ -213,8 +231,8 @@ def graph_boxplot_region_size(pdfeatures,primaryfile,sfile,tfile):
 	gs.update(hspace=.8)
 	
 	ax0 = plt.subplot(gs[0,0])
-	sns.boxplot(data=pdfeatures,x='primary',y=tfile)
-	ax0.set_ylabel('Total Count')
+	sns.boxplot(data=pdfeatures,x='primary',y=tfile,showfliers=False))
+	ax0.set_ylabel(ylabeltext)
 	ax0.set_xlabel('')
 # 	ax0.tick_params(axis='both',which='major',labelsize=16)
 	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
@@ -238,7 +256,7 @@ def graph_binned_regions_no_tertiary(pdfeatures,primaryfile,sfile):
 	
 	ax0 = plt.subplot(gs[0,0])
 	sns.pointplot(data=pdfeatures,x='bin',y='sumbin',color='#9ecae1',scale=3)
-	ax0.set_ylabel('Count Frequency')
+	ax0.set_ylabel('Frequency')
 	ax0.set_xlabel('Bin Distance from Edge')
 # 	ax0.tick_params(axis='both',which='major',labelsize=16)
 	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
@@ -255,6 +273,7 @@ def main():
 	primaryfile = args.file
 	secondaryfiles = [line.strip() for line in args.secondaryfeatures]
 	tertiaryfiles = [line.strip() for line in args.tertiaryfeatures]
+	quinaryfiles = [line.strip() for line in args.quinaryfeatures] # have to integrate to graph subset of uces on boxplot
 	bins = args.binnumber
 	genomefile = args.genomefile
 	
@@ -277,90 +296,89 @@ def main():
 		# remove all secondary regions with no primary overlaps
 		cleanintersect = remove_rows_with_no_overlaps(scoord,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
 		
-		# 2) Query: Where in the domain are the UCEs
-		binfeatures,windows = locateing_features(primary,sfile,bins)
 		
-		# group bin counts by secondary features they came from
-		groupfeatures = group_df_by_secondary_regions(binfeatures)
+		# 2a) Query: Where in the domain are the UCEs
+		binfeatures,windows = locateing_features(primary,scoord[['chr','start','end','id']],bins)
 		
+# 		# group bin counts by secondary features they came from
+# 		groupfeatures = group_df_by_secondary_regions(binfeatures)
+# 		
 		# remove secondary features where there are no primary elements
-		dropzero = drop_primary_zero_list(groupfeatures,'bincounts_count_primary')
-		
-		# shape the data frame
-		formatbin = format_binned_data_for_graphing(dropzero,bins)
-		
-		# fold the data frame by combining edges
-		foldbin = fold_formated_binned_data(formatbin,bins)
-		
-		# 6) generate graph for bin results
-		graph_binned_regions_no_tertiary(foldbin,primaryfile,sfile)
-		
-		# format data for boxplot graphs of secondary size
-		dropzero = (scoord.loc[scoord['intersect_primary'] > 0])
-		sumdrop = dropzero['size'].reset_index(drop=False)
-		sumdrop['primary'] = 'Regions With Primary'
-		keepzero = (scoord.loc[scoord['intersect_primary'] < 1])
-		sumkeep = keepzero['size'].reset_index(drop=False)
-		sumkeep['primary'] = 'Regions Without Primary'
-		tertiarysum = pd.concat([sumdrop,sumkeep])
-		tertiarysum.drop(columns=['index'],inplace=True)
-		
-		# graph size for secondary regions
-		graph_boxplot_region_size(tertiarysum,primaryfile,sfile,'size')
-		
-		# add the primary x secondary intersections data to the list for lump secondary stats
-		lumpsecondaryfiles.append(cleanintersect)
-		
+# 		dropzero = drop_primary_zero_list(groupfeatures,'bincounts_count_primary')
+# 		
+# 		# shape the data frame
+# 		formatbin = format_binned_data_for_graphing(dropzero,bins)
+# 		
+# 		# fold the data frame by combining edges
+# 		foldbin = fold_formated_binned_data(formatbin,bins)
+# 		
+# 		# 6) generate graph for bin results
+# 		graph_binned_regions_no_tertiary(foldbin,primaryfile,sfile)
+# 		
+# 		# format data for boxplot graphs of secondary size
+# 		dropzero = (scoord.loc[scoord['intersect_primary'] > 0])
+# 		sumdrop = dropzero['size'].reset_index(drop=False)
+# 		sumdrop['primary'] = 'Regions With Primary'
+# 		keepzero = (scoord.loc[scoord['intersect_primary'] < 1])
+# 		sumkeep = keepzero['size'].reset_index(drop=False)
+# 		sumkeep['primary'] = 'Regions Without Primary'
+# 		tertiarysum = pd.concat([sumdrop,sumkeep])
+# 		tertiarysum.drop(columns=['index'],inplace=True)
+# 		
+# 		# graph size for secondary regions
+# 		graph_boxplot_region_size(tertiarysum,primaryfile,sfile,'size','Size (kb)')
+# 		
+# 		# add the primary x secondary intersections data to the list for lump secondary stats
+# 		lumpsecondaryfiles.append(cleanintersect)
+# 		
 		# for contrast with tertiary features
-		for tfile in tertiaryfiles:
-			# 3) Query: What other features characterize domains with UCEs; in a domain
-			tertiary,intersect = additional_features_overlap(secondary,scoord,tfile)
-			
-			# 4) Query: What other features characterize domains with UCEs; where in domain
-			groupfeatures = additional_features_locate(secondary,tertiary,tfile,binfeatures,windows)
-			
-			# 5) generate stats results
-			primarystats = panda_describe_single_column(primary,'size_primary')
-			tertiarystats = panda_describe_single_column(tertiary,'size_{0}'.format(tfile))
-			
-			# get the number of features with no primary overlaps
-			nooverlaps = count_number_with_zero_overlaps(intersect,'intersect_primary')
-			print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
-			
-			# remove all secondary regions with no primary overlaps
-			cleanintersect = remove_rows_with_no_overlaps(intersect,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
-			cleanintersect.rename(columns={'size_x':'size_{0}'.format(sfile)},inplace=True)
-			cleanintersect.drop(columns=['size_y'],inplace=True)
-			
-			# make stats file
-			intersectstats = panda_describe_multiple_column(cleanintersect)
-			alltertiarystats = pd.concat([intersectstats,primarystats,tertiarystats],axis=1)
-			
-			# save stats to file
-			save_panda(alltertiarystats,'stats_{0}_intersection.txt'.format(primaryfile))
-			
-			# format data for boxplot graphs of tertiary feature counts
-			dropzero = (intersect.loc[intersect['intersect_primary'] > 0])
-			sumdrop = dropzero['intersect_{0}'.format(tfile)].reset_index(drop=False)
-			sumdrop['primary'] = 'Regions With Primary'
-			keepzero = (intersect.loc[intersect['intersect_primary'] < 1])
-			sumkeep = keepzero['intersect_{0}'.format(tfile)].reset_index(drop=False)
-			sumkeep['primary'] = 'Regions Without Primary'
-			tertiarysum = pd.concat([sumdrop,sumkeep])
-			tertiarysum.drop(columns=['index'],inplace=True)
-			
-			# graph counts for tertiary features
-			graph_boxplot_region_size(tertiarysum,primaryfile,sfile,'intersect_{0}'.format(tfile))
-			
-	# make the stats data frame for all the secondary features
-	concatsecondary = pd.concat(lumpsecondaryfiles)
-	concatsecondary.rename(columns={'size':'size_all_secondary'},inplace=True)
-	catsecondarystats = panda_describe_multiple_column(concatsecondary)
-	
-	# save stats to file
-	save_panda(catsecondarystats,'stats_{0}_intersection.txt'.format(primaryfile))
-
-
+# 		for tfile in tertiaryfiles:
+# 			# 3) Query: What other features characterize domains with UCEs; in a domain
+# 			tertiary,intersect = additional_features_overlap(secondary,scoord,tfile)
+# 			
+# 			# 4) Query: What other features characterize domains with UCEs; where in domain
+# 			groupfeatures = additional_features_locate(secondary,tertiary,tfile,binfeatures,windows)
+# 			
+# 			# 5) generate stats results
+# 			primarystats = panda_describe_single_column(primary,'size_primary')
+# 			tertiarystats = panda_describe_single_column(tertiary,'size_{0}'.format(tfile))
+# 			
+# 			# get the number of features with no primary overlaps
+# 			nooverlaps = count_number_with_zero_overlaps(intersect,'intersect_primary')
+# 			print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
+# 			
+# 			# remove all secondary regions with no primary overlaps
+# 			cleanintersect = remove_rows_with_no_overlaps(intersect,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
+# 			cleanintersect.rename(columns={'size_x':'size_{0}'.format(sfile)},inplace=True)
+# 			cleanintersect.drop(columns=['size_y'],inplace=True)
+# 			
+# 			# make stats file
+# 			intersectstats = panda_describe_multiple_column(cleanintersect)
+# 			alltertiarystats = pd.concat([intersectstats,primarystats,tertiarystats],axis=1)
+# 			
+# 			# save stats to file
+# 			save_panda(alltertiarystats,'stats_{0}_intersection.txt'.format(primaryfile))
+# 			
+# 			# format data for boxplot graphs of tertiary feature counts
+# 			dropzero = (intersect.loc[intersect['intersect_primary'] > 0])
+# 			sumdrop = dropzero['intersect_{0}'.format(tfile)].reset_index(drop=False)
+# 			sumdrop['primary'] = 'Regions With Primary'
+# 			keepzero = (intersect.loc[intersect['intersect_primary'] < 1])
+# 			sumkeep = keepzero['intersect_{0}'.format(tfile)].reset_index(drop=False)
+# 			sumkeep['primary'] = 'Regions Without Primary'
+# 			tertiarysum = pd.concat([sumdrop,sumkeep])
+# 			tertiarysum.drop(columns=['index'],inplace=True)
+# 			
+# 			# graph counts for tertiary features
+# 			graph_boxplot_region_size(tertiarysum,primaryfile,sfile,'intersect_{0}'.format(tfile),'Frequency')
+# 			
+# 	# make the stats data frame for all the secondary features
+# 	concatsecondary = pd.concat(lumpsecondaryfiles)
+# 	concatsecondary.rename(columns={'size':'size_all_secondary'},inplace=True)
+# 	catsecondarystats = panda_describe_multiple_column(concatsecondary)
+# 	
+# 	# save stats to file
+# 	save_panda(catsecondarystats,'stats_{0}_intersection.txt'.format(primaryfile))
 
 if __name__ == "__main__":
 	main()
