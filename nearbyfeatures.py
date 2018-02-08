@@ -39,6 +39,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from itertools import cycle
 import matplotlib
+import numpy as np
 
 # set args
 def get_args():
@@ -199,25 +200,49 @@ def keep_primary_zero_list(pdfeatures,column):
 	thresh = pdfeatures[pdfeatures[column].apply(lambda row: all(item ==0 for item in row))]
 	return thresh
 
-# 6c) format the binned data frame for easy graphing
-def format_binned_data_for_graphing(pdfeatures,bins):
+# 6ci) format the binned data frame for pointplot graphing
+def format_binned_data_sum_for_graphing(pdfeatures,bins):
 	selectcols = [col for col in pdfeatures.columns if 'bincounts' in col]
-	list = []
+	listsum = []
 	for group in selectcols:
 		subset = pdfeatures[[group]]
 		split = pd.DataFrame(subset[group].values.tolist())
 		sum = split.sum(axis=0)
-		list.append(sum)
-	concat = pd.concat(list,axis=1)
-	concat.columns = [selectcols]
+		listsum.append(sum)
+	concatsum = pd.concat(listsum,axis=1)
+	concatsum.columns = [selectcols]
 	bincolumns = range(bins)
-	format = pd.melt(concat)
+	format = pd.melt(concatsum)
 	format.columns = ['filename','sumbin']
 	format['bin'] = bincolumns * (format.shape[0]/len(bincolumns))
 	return format
 
-# 6d) fold data set
-def fold_formated_binned_data(pdfeatures,bins):
+# 6cii) format the binned data frame for box plot graphing
+def format_binned_dataframe_for_boxplot(pdfeatures,bins):
+	selectcols = [col for col in pdfeatures.columns if 'bincounts' in col]
+	listdf = []
+	for group in selectcols:
+		subset = pdfeatures[[group]]
+		split = pd.DataFrame(subset[group].values.tolist())
+		split['filename'] = group
+		listdf.append(split)
+	concatdf = pd.concat(listdf,axis=0)
+	return concatdf
+
+# 6ciii) format the with/without regions for graphing
+def format_with_without_data_for_boxplot(pdfeatures,column):
+	dropzero = (pdfeatures.loc[pdfeatures['intersect_primary'] > 0])
+	sumdrop = dropzero[column].reset_index(drop=False)
+	sumdrop['primary'] = 'Regions With Primary'
+	keepzero = (pdfeatures.loc[pdfeatures['intersect_primary'] < 1])
+	sumkeep = keepzero[column].reset_index(drop=False)
+	sumkeep['primary'] = 'Regions Without Primary'
+	tertiarysum = pd.concat([sumdrop,sumkeep])
+	tertiarysum.drop(columns=['index'],inplace=True)
+	return tertiarysum
+
+# 6di) fold data set sums
+def fold_formated_binned_data_sum(pdfeatures,bins):
 	halfbin = bins/2
 	pdfeatures['invertsumbin'] = pdfeatures['sumbin'].iloc[::-1].reset_index(drop=True)
 	pdfeatures['sumsums'] = pdfeatures['invertsumbin'] + pdfeatures['sumbin']
@@ -226,10 +251,22 @@ def fold_formated_binned_data(pdfeatures,bins):
 	dropfeatures.columns = ['filename','sumbin','bin']
 	return dropfeatures
 
+# 6dii) fold data set 
+def fold_formated_binned_data_df(pdfeatures,bins):
+	filefeatures = pdfeatures[['filename']]
+	pdfeatures.drop('filename',axis=1,inplace=True)
+	halfbin = bins/2
+	reversefeatures = pdfeatures.iloc[:, ::-1]
+	reversefeatures.columns = range(bins)
+	sumfeatures = pdfeatures.add(reversefeatures, fill_value=0)
+	halffeatures = sumfeatures.iloc[:,:halfbin]
+	catfeatures = pd.concat([halffeatures,filefeatures],axis=1)
+	return catfeatures
+
 # 6ei) graph box plots for secondary and tertiary data - will have to put in the y axis label as arg
-def graph_boxplot_region_size(pdfeatures,primaryfile,sfile,tfile,ylabeltext):
+def graph_boxplot_region_size(pdfeatures,filename,yvalue,ylabeltext):
 	sns.set_style('ticks')
-	pp = PdfPages('tertiarycount_{0}_{1}_{2}.pdf'.format(primaryfile,sfile,tfile))
+	pp = PdfPages(filename)
 	plt.figure(figsize=(14,7))
 	
 	sns.set_palette("Blues")
@@ -238,10 +275,9 @@ def graph_boxplot_region_size(pdfeatures,primaryfile,sfile,tfile,ylabeltext):
 	gs.update(hspace=.8)
 	
 	ax0 = plt.subplot(gs[0,0])
-	sns.boxplot(data=pdfeatures,x='primary',y=tfile,showfliers=False)
+	sns.boxplot(data=pdfeatures,x='primary',y=yvalue,showfliers=False)
 	ax0.set_ylabel(ylabeltext)
 	ax0.set_xlabel('')
-# 	ax0.tick_params(axis='both',which='major',labelsize=16)
 	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
 		item.set_fontsize(22)
 	
@@ -249,10 +285,32 @@ def graph_boxplot_region_size(pdfeatures,primaryfile,sfile,tfile,ylabeltext):
 	pp.savefig()
 	pp.close()
 
-# 6eii) line graph binned data with no tertiary features
-def graph_binned_regions_no_tertiary(pdfeatures,primaryfile,sfile):
+# 6eii) graph box plots for secondary and tertiary data over binned regions
+def graph_boxplot_binned_regions(pdfeatures,filename):
 	sns.set_style('ticks')
-	pp = PdfPages('bincounts_{0}_{1}.pdf'.format(primaryfile,sfile))
+	pp = PdfPages(filename)
+	plt.figure(figsize=(14,7))
+	
+	sns.set_palette("Blues")
+	
+	gs = gridspec.GridSpec(1,1)
+	gs.update(hspace=.8)
+	
+	ax0 = plt.subplot(gs[0,0])
+	sns.boxplot(data=pdfeatures,showfliers=False)
+	ax0.set_ylabel('Frequency') # NORMALIZE! by total number of elements in each data set
+	ax0.set_xlabel('Bin Distance from Edge')
+	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
+		item.set_fontsize(22)
+	
+	sns.despine()
+	pp.savefig()
+	pp.close()
+
+# 6eiii) line graph binned data with no tertiary features
+def graph_binned_regions_no_tertiary(pdfeatures,filename):
+	sns.set_style('ticks')
+	pp = PdfPages(filename)
 	plt.figure(figsize=(14,7))
 	
 	unique = len(pdfeatures['filename'].unique())
@@ -265,7 +323,6 @@ def graph_binned_regions_no_tertiary(pdfeatures,primaryfile,sfile):
 	sns.pointplot(data=pdfeatures,x='bin',y='sumbin',color='#9ecae1',scale=3)
 	ax0.set_ylabel('Frequency')
 	ax0.set_xlabel('Bin Distance from Edge')
-# 	ax0.tick_params(axis='both',which='major',labelsize=16)
 	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
 		item.set_fontsize(22)
 	
@@ -288,7 +345,12 @@ def main():
 	allfiles = secondaryfiles + tertiaryfiles
 	allfiles.insert(0,primaryfile)
 	
+	# get the primary features
 	primary = get_bedtools_features(primaryfile)
+	
+	# get the number of primary features
+	pdprimary = convert_bedtools_to_panda(primary)
+	lengthprimary = len(pdprimary)
 	
 	lumpsecondaryfilestats = []
 	lumpsecondaryfilesfull = []
@@ -302,7 +364,7 @@ def main():
 		print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
 		
 		# remove all secondary regions with no primary overlaps
-		cleanintersect = remove_rows_with_no_overlaps(scoord,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
+		cleanintersect = remove_rows_with_no_overlaps(scoord,'intersect_primary')
 		
 		# 2a) Query: Where in the domain are the UCEs
 		binfeatures,windows = locateing_features(primary,scoord,bins)
@@ -314,26 +376,19 @@ def main():
 		dropzero = drop_primary_zero_list(groupfeatures,'bincounts_count_primary')
 		
 		# shape the data frame
-		formatbin = format_binned_data_for_graphing(dropzero,bins)
+		formatbin = format_binned_data_sum_for_graphing(dropzero,bins)
 		
-		# fold the data frame by combining edges
-		foldbin = fold_formated_binned_data(formatbin,bins)
+		# fold the data frame by combining edges for the pointplot
+		foldbin = fold_formated_binned_data_sum(formatbin,bins)
 		
 		# 6) generate graph for bin results
-		graph_binned_regions_no_tertiary(foldbin,primaryfile,sfile)
+		graph_binned_regions_no_tertiary(foldbin,'bincounts_{0}_{1}.pdf'.format(primaryfile,sfile))
 		
 		# format data for boxplot graphs of secondary size
-		dropzero = (scoord.loc[scoord['intersect_primary'] > 0])
-		sumdrop = dropzero['size'].reset_index(drop=False)
-		sumdrop['primary'] = 'Regions With Primary'
-		keepzero = (scoord.loc[scoord['intersect_primary'] < 1])
-		sumkeep = keepzero['size'].reset_index(drop=False)
-		sumkeep['primary'] = 'Regions Without Primary'
-		tertiarysum = pd.concat([sumdrop,sumkeep])
-		tertiarysum.drop(columns=['index'],inplace=True)
+		secondarysum = format_with_without_data_for_boxplot(scoord,'size')
 		
 		# graph size for secondary regions
-		graph_boxplot_region_size(tertiarysum,primaryfile,sfile,'size','Size')
+		graph_boxplot_region_size(secondarysum,'domainsize_{0}.pdf'.format(sfile),'size','Size')
 		
 		# add the primary x secondary intersections data to the list for lump secondary stats
 		lumpsecondaryfilestats.append(cleanintersect)
@@ -344,9 +399,34 @@ def main():
 			# 3) Query: What other features characterize domains with UCEs; in a domain
 			tertiary,intersect = additional_features_overlap(secondary,scoord,tfile)
 			
+			# get the number of tertiary feature
+			pdtertiary = convert_bedtools_to_panda(tertiary)
+			lengthtertiary = len(pdtertiary)
+			
 			# 4) Query: What other features characterize domains with UCEs; where in domain
 			groupfeatures = additional_features_locate(secondary,tertiary,tfile,binfeatures,windows)
 			
+			# remove secondary features where there are no primary elements
+			dropzero = drop_primary_zero_list(groupfeatures,'bincounts_count_primary')
+			
+			# format the data frame with the filename as a column
+			formatdf = format_binned_dataframe_for_boxplot(dropzero,bins)
+			
+			# fold the data frame by combining edges for the boxplot
+			folddf = fold_formated_binned_data_df(formatdf,bins)
+			
+			# normalize the values by total counts per each data set
+			halfbin = bins/2
+			print folddf.iloc[:,:halfbin].head()
+# 			subsetdf = folddf[(folddf['filename'] == "bincounts_count_primary")]
+# 			normalizedf = folddf.loc[folddf['filename']=='bincounts_count_primary'].apply(folddf.iloc[:,:halfbin]/lengthprimary,axis=1)
+# 			normalizedf = np.where(folddf.filename.values == 'bincounts_count_primary', folddf.iloc[:,:halfbin]/lengthprimary, folddf.iloc[:,:halfbin]/lengthtertiary)
+# 			normalizedf = (folddf.iloc[:,:halfbin].apply(lambda x: x/lengthprimary)).where(folddf['filename']=='bincounts_count_primary')
+			print normalizedf
+			
+			# graph
+# 			graph_boxplot_binned_regions(pdfeatures,filename)
+
 			# 5) generate stats results
 			primarystats = panda_describe_single_column(primary,'size_primary')
 			tertiarystats = panda_describe_single_column(tertiary,'size_{0}'.format(tfile))
@@ -356,7 +436,7 @@ def main():
 			print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
 			
 			# remove all secondary regions with no primary overlaps
-			cleanintersect = remove_rows_with_no_overlaps(intersect,'intersect_primary') # may want to wait, and make graphs for those with uces vs those without
+			cleanintersect = remove_rows_with_no_overlaps(intersect,'intersect_primary')
 			cleanintersect.rename(columns={'size_x':'size_{0}'.format(sfile)},inplace=True)
 			cleanintersect.drop(columns=['size_y'],inplace=True)
 			
@@ -368,17 +448,10 @@ def main():
 			save_panda(alltertiarystats,'stats_{0}_intersection.txt'.format(primaryfile))
 			
 			# format data for boxplot graphs of tertiary feature counts
-			dropzero = (intersect.loc[intersect['intersect_primary'] > 0])
-			sumdrop = dropzero['intersect_{0}'.format(tfile)].reset_index(drop=False)
-			sumdrop['primary'] = 'Regions With Primary'
-			keepzero = (intersect.loc[intersect['intersect_primary'] < 1])
-			sumkeep = keepzero['intersect_{0}'.format(tfile)].reset_index(drop=False)
-			sumkeep['primary'] = 'Regions Without Primary'
-			tertiarysum = pd.concat([sumdrop,sumkeep])
-			tertiarysum.drop(columns=['index'],inplace=True)
+			tertiarysum = format_with_without_data_for_boxplot(intersect,'intersect_{0}'.format(tfile))
 			
 			# graph counts for tertiary features
-			graph_boxplot_region_size(tertiarysum,primaryfile,sfile,'intersect_{0}'.format(tfile),'Frequency')
+			graph_boxplot_region_size(tertiarysum,'genecount_{0}_{1}.pdf'.format(sfile,tfile),'intersect_{0}'.format(tfile),'Frequency')
 			
 	# make the stats data frame for all the secondary features
 	concatsecondary = pd.concat(lumpsecondaryfilestats)
@@ -387,18 +460,10 @@ def main():
 	
 	# format data for boxplot graphs of secondary size
 	concatsecondaryfull = pd.concat(lumpsecondaryfilesfull)
-	dropzero = (concatsecondaryfull.loc[concatsecondaryfull['intersect_primary'] > 0])
-	sumdrop = dropzero['size'].reset_index(drop=False)
-	sumdrop['primary'] = 'Regions With Primary'
-	keepzero = (scoord.loc[scoord['intersect_primary'] < 1])
-	sumkeep = keepzero['size'].reset_index(drop=False)
-	sumkeep['primary'] = 'Regions Without Primary'
-	tertiarysum = pd.concat([sumdrop,sumkeep])
-	tertiarysum.drop(columns=['index'],inplace=True)
+	totalsum = format_with_without_data_for_boxplot(concatsecondaryfull,'size')
+	
 	# graph counts for tertiary features
-	graph_boxplot_region_size(tertiarysum,primaryfile,'allsecondary','size','Size')
-	# graph for genes
-
+	graph_boxplot_region_size(totalsum,'domainsize_all.pdf','size','Size')
 
 	# save stats to file
 	save_panda(catsecondarystats,'stats_{0}_intersection.txt'.format(primaryfile))
