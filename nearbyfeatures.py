@@ -263,6 +263,15 @@ def fold_formated_binned_data_df(pdfeatures,bins):
 	catfeatures = pd.concat([halffeatures,filefeatures],axis=1)
 	return catfeatures
 
+# 6diii) normalize data
+def normalize_by_total_count(bins,df,filename,length):
+	halfbin = bins/2
+	subsetprimaryfiles = df[df['filename']==filename]
+	subsetprimarydata = subsetprimaryfiles.iloc[:,:halfbin]
+	normalizeprimary = subsetprimarydata.apply(lambda x: x/length)
+	normalizeprimary['filename'] = filename
+	return normalizeprimary
+
 # 6ei) graph box plots for secondary and tertiary data - will have to put in the y axis label as arg
 def graph_boxplot_region_size(pdfeatures,filename,yvalue,ylabeltext):
 	sns.set_style('ticks')
@@ -297,8 +306,8 @@ def graph_boxplot_binned_regions(pdfeatures,filename):
 	gs.update(hspace=.8)
 	
 	ax0 = plt.subplot(gs[0,0])
-	sns.boxplot(data=pdfeatures,showfliers=False)
-	ax0.set_ylabel('Frequency') # NORMALIZE! by total number of elements in each data set
+	sns.boxplot(data=pdfeatures,x='variable',y='value',showfliers=False,hue='filename')
+	ax0.set_ylabel('Frequency of Elements as Fraction of Total Elements')
 	ax0.set_xlabel('Bin Distance from Edge')
 	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
 		item.set_fontsize(22)
@@ -416,17 +425,15 @@ def main():
 			folddf = fold_formated_binned_data_df(formatdf,bins)
 			
 			# normalize the values by total counts per each data set
-			halfbin = bins/2
-			print folddf.iloc[:,:halfbin].head()
-# 			subsetdf = folddf[(folddf['filename'] == "bincounts_count_primary")]
-# 			normalizedf = folddf.loc[folddf['filename']=='bincounts_count_primary'].apply(folddf.iloc[:,:halfbin]/lengthprimary,axis=1)
-# 			normalizedf = np.where(folddf.filename.values == 'bincounts_count_primary', folddf.iloc[:,:halfbin]/lengthprimary, folddf.iloc[:,:halfbin]/lengthtertiary)
-# 			normalizedf = (folddf.iloc[:,:halfbin].apply(lambda x: x/lengthprimary)).where(folddf['filename']=='bincounts_count_primary')
-			print normalizedf
+			normalizedprimary = normalize_by_total_count(bins,folddf,'bincounts_count_primary',lengthprimary)
+			normalizedtertiary = normalize_by_total_count(bins,folddf,'bincounts_count_{0}'.format(tfile),lengthtertiary)
+			catnormalized = pd.concat([normalizedprimary,normalizedtertiary])
+			
+			meltnormalized = pd.melt(catnormalized,id_vars=['filename'])
 			
 			# graph
-# 			graph_boxplot_binned_regions(pdfeatures,filename)
-
+			graph_boxplot_binned_regions(meltnormalized,'bincount_dist_{0}_{1}.pdf'.format(primaryfile,sfile))
+			
 			# 5) generate stats results
 			primarystats = panda_describe_single_column(primary,'size_primary')
 			tertiarystats = panda_describe_single_column(tertiary,'size_{0}'.format(tfile))
@@ -443,6 +450,8 @@ def main():
 			# make stats file
 			intersectstats = panda_describe_multiple_column(cleanintersect)
 			alltertiarystats = pd.concat([intersectstats,primarystats,tertiarystats],axis=1)
+			
+			alltertiarystats.columns = ['intersection_{0}_{1}'.format(primaryfile,sfile),'intersection_{0}_{1}'.format(tfile,sfile),'size_{0}'.format(sfile),'size_{0}'.format(primaryfile),'size_{0}'.format(tfile)]
 			
 			# save stats to file
 			save_panda(alltertiarystats,'stats_{0}_intersection.txt'.format(primaryfile))
