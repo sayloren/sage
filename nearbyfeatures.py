@@ -266,60 +266,7 @@ def fold_formated_binned_data_df(pdfeatures,bins):
 	catfeatures = pd.concat([halffeatures,filefeatures],axis=1)
 	return catfeatures
 
-# 6diii) normalize data
-def normalize_by_total_count(bins,df,filename,length):
-	halfbin = bins/2
-	subsetprimaryfiles = df[df['filename']==filename]
-	subsetprimarydata = subsetprimaryfiles.iloc[:,:halfbin]
-	normalizeprimary = subsetprimarydata.apply(lambda x: x/length)
-	normalizeprimary['filename'] = filename
-	return normalizeprimary
-
-# 6ei) graph box plots for secondary and tertiary data - will have to put in the y axis label as arg
-def graph_boxplot_region_size(pdfeatures,filename,yvalue,ylabeltext):
-	sns.set_style('ticks')
-	pp = PdfPages(filename)
-	plt.figure(figsize=(14,7))
-	plt.rcParams['axes.formatter.limits'] = (-3, 3)
-	
-	sns.set_palette("Blues")
-	
-	gs = gridspec.GridSpec(1,1)
-	gs.update(hspace=.8)
-	
-	ax0 = plt.subplot(gs[0,0])
-	sns.boxplot(data=pdfeatures,x='primary',y=yvalue,showfliers=False)
-	ax0.set_ylabel(ylabeltext)
-	ax0.set_xlabel('')
-	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
-		item.set_fontsize(22)
-	sns.despine()
-	pp.savefig()
-	pp.close()
-
-# 6eii) graph box plots for secondary and tertiary data over binned regions
-def graph_boxplot_binned_regions(pdfeatures,filename):
-	sns.set_style('ticks')
-	pp = PdfPages(filename)
-	plt.figure(figsize=(14,7))
-	
-	sns.set_palette("Blues")
-	
-	gs = gridspec.GridSpec(1,1)
-	gs.update(hspace=.8)
-	
-	ax0 = plt.subplot(gs[0,0])
-	sns.boxplot(data=pdfeatures,x='variable',y='value',showfliers=False,hue='filename')
-	ax0.set_ylabel('Fraction of Total Element Count')
-	ax0.set_xlabel('Bin Distance from Edge')
-	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
-		item.set_fontsize(22)
-	
-	sns.despine()
-	pp.savefig()
-	pp.close()
-
-# 6eiii) line graph binned data with no tertiary features
+# 6ei) line graph binned data with no tertiary features
 def graph_binned_regions_no_tertiary(pdfeatures,filename):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
@@ -341,6 +288,134 @@ def graph_binned_regions_no_tertiary(pdfeatures,filename):
 	sns.despine()
 	pp.savefig()
 	pp.close()
+
+# 6eii) normalize data
+def normalize_by_total_count(bins,df,filename,length):
+	halfbin = bins/2
+	subsetprimaryfiles = df[df['filename']==filename]
+	subsetprimarydata = subsetprimaryfiles.iloc[:,:halfbin]
+	normalizeprimary = subsetprimarydata.apply(lambda x: x/length)
+	normalizeprimary['filename'] = filename
+	return normalizeprimary
+
+# 6eiii) graph box plots for secondary and tertiary data - will have to put in the y axis label as arg
+def graph_boxplot_region_size(pdfeatures,filename,yvalue,ylabeltext):
+	sns.set_style('ticks')
+	pp = PdfPages(filename)
+	plt.figure(figsize=(14,7))
+	plt.rcParams['axes.formatter.limits'] = (-3, 3)
+	
+	sns.set_palette("Blues")
+	
+	gs = gridspec.GridSpec(1,1)
+	gs.update(hspace=.8)
+	
+	ax0 = plt.subplot(gs[0,0])
+	sns.boxplot(data=pdfeatures,x='primary',y=yvalue,showfliers=False)
+	ax0.set_ylabel(ylabeltext)
+	ax0.set_xlabel('')
+	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
+		item.set_fontsize(22)
+	sns.despine()
+	pp.savefig()
+	pp.close()
+
+# 6fii) graph box plots for secondary and tertiary data over binned regions
+def graph_boxplot_binned_regions(pdfeatures,filename):
+	sns.set_style('ticks')
+	pp = PdfPages(filename)
+	plt.figure(figsize=(14,7))
+	
+	sns.set_palette("Blues")
+	
+	gs = gridspec.GridSpec(1,1)
+	gs.update(hspace=.8)
+	
+	ax0 = plt.subplot(gs[0,0])
+	sns.boxplot(data=pdfeatures,x='variable',y='value',showfliers=False,hue='filename')
+	ax0.set_ylabel('Fraction of Total Element Count')
+	ax0.set_xlabel('Bin Distance from Edge')
+	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
+		item.set_fontsize(22)
+	
+	sns.despine()
+	pp.savefig()
+	pp.close()
+
+# get the number of quinary features
+def number_quinary_features(quinaryfiles):
+	quinary = get_bedtools_features(quinaryfiles)
+	pdquinary = convert_bedtools_to_panda(quinary)
+	lengthquinary = len(pdquinary)
+	print 'there are {0} elements in {1}'.format(lengthquinary,quinaryfiles)
+	return quinary
+
+# intersect quinary features to get the subset of primary featutes
+def intersect_quinary_features(quinary,scoord,quinaryfiles,sfile):
+	tempsecondary,qcoord = overlaping_features(quinary,sfile)
+	qcoord.rename(columns={'intersect_primary':'intersect_{0}'.format(quinaryfiles)},inplace=True)
+	qcoord.drop(labels=['id'],axis=1,inplace=True)
+	concatintersect = scoord.merge(qcoord,how='left',on=['chr','start','end','size'])
+	return qcoord,concatintersect
+
+# print number of features from secondary intersections with primary and quinary
+def print_number_features(scoord,qcoord,sfile,quinaryfiles):
+	sumuce = scoord['intersect_primary'].sum()
+	summouse = qcoord['intersect_{0}'.format(quinaryfiles)].sum()
+	print '{0} total uces, {1} mouse uces that are overlapped in secondary file {2}'.format(sumuce,summouse,sfile)
+
+# rename columns in stats file for clarity
+def rename_stats_columns(alltertiarystats,primaryfile,sfile,tfile,quinaryfiles):
+	alltertiarystats.rename(columns={'intersect_primary':'intersect_{0}_{1}'.format(primaryfile,sfile)},inplace=True)
+	alltertiarystats.rename(columns={'intersect_{0}'.format(tfile):'intersect_{0}_{1}'.format(tfile,sfile)},inplace=True)
+	alltertiarystats.rename(columns={'intersect_{0}'.format(quinaryfiles):'intersect_{0}_{1}'.format(quinaryfiles,sfile)},inplace=True)
+	alltertiarystats.rename(columns={'size'.format(tfile):'size_{0}'.format(sfile)},inplace=True)
+	alltertiarystats.rename(columns={'size_primary'.format(tfile):'size_{0}'.format(primaryfile)},inplace=True)
+	return alltertiarystats
+
+# tile the plots for all features
+def tile_all_collected_features(graphone,graphtwo,graphthree,graphfour,filename):
+	sns.set_style('ticks')
+	pp = PdfPages(filename)
+	plt.figure(figsize=(14,7))
+	
+	sns.set_palette("Blues")
+	
+	gs = gridspec.GridSpec(2,2)
+	gs.update(hspace=.8)
+	
+	ax0 = plt.subplot(gs[0,0])
+	sns.pointplot(data=graphone,x='bin',y='sumbin',color='#9ecae1',scale=3)
+	ax0.set_ylabel('Frequency')
+	ax0.set_xlabel('Bin Distance from Edge')
+	for item in ([ax0.title, ax0.xaxis.label, ax0.yaxis.label] + ax0.get_xticklabels() + ax0.get_yticklabels()):
+		item.set_fontsize(22)
+
+	ax1 = plt.subplot(gs[0,1])
+	sns.pointplot(data=graphtwo,x='bin',y='sumbin',color='#9ecae1',scale=3)
+	ax1.set_ylabel('Frequency')
+	ax1.set_xlabel('Bin Distance from Edge')
+	for item in ([ax1.title, ax1.xaxis.label, ax1.yaxis.label] + ax1.get_xticklabels() + ax1.get_yticklabels()):
+		item.set_fontsize(22)
+
+	ax2 = plt.subplot(gs[1,0])
+	sns.boxplot(data=graphthree,x='primary',y='size',showfliers=False)
+	ax2.set_ylabel('Size (bp)')
+	ax2.set_xlabel('')
+	for item in ([ax2.title, ax2.xaxis.label, ax2.yaxis.label] + ax2.get_yticklabels()):
+		item.set_fontsize(22)
+
+	ax3 = plt.subplot(gs[1,1])
+	sns.boxplot(data=graphfour,x='primary',y='intersect_tertiary',showfliers=False)
+	ax3.set_ylabel('Frequency')
+	ax3.set_xlabel('')
+	for item in ([ax3.title, ax3.xaxis.label, ax3.yaxis.label] + ax3.get_yticklabels()):
+		item.set_fontsize(22)
+
+	sns.despine()
+	pp.savefig()
+	pp.close()
+
 
 def main():
 	args = get_args()
@@ -367,6 +442,9 @@ def main():
 	
 	lumpsecondaryfilestats = []
 	lumpsecondaryfilesfull = []
+	lumpprimarybinned = []
+	lumptertiarybinned = []
+	lumptertiarysum = []
 	
 	# process feature files
 	for sfile in secondaryfiles:
@@ -377,22 +455,14 @@ def main():
 		nooverlaps = count_number_with_zero_overlaps(scoord,'intersect_primary')
 		print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
 		
-		# get the number of quinary features
-		quinary = get_bedtools_features(quinaryfiles)
-		pdquinary = convert_bedtools_to_panda(quinary)
-		lengthquinary = len(pdquinary)
-		print 'there are {0} elements in {1}'.format(lengthquinary,quinaryfiles)
+		# print number of quinary features, return quinary features in panda
+		quinary = number_quinary_features(quinaryfiles)
 		
 		# make quinary intersections
-		tempsecondary,qcoord = overlaping_features(quinary,sfile)
-		qcoord.rename(columns={'intersect_primary':'intersect_{0}'.format(quinaryfiles)},inplace=True)
-		qcoord.drop(labels=['id'],axis=1,inplace=True)
-		concatintersect = scoord.merge(qcoord,how='left',on=['chr','start','end','size'])
+		qcoord,concatintersect = intersect_quinary_features(quinary,scoord,quinaryfiles,sfile)
 		
 		# get the number of uces in the secondary file
-		sumuce = scoord['intersect_primary'].sum()
-		summouse = qcoord['intersect_{0}'.format(quinaryfiles)].sum()
-		print '{0} total uces, {1} mouse uces that are overlapped in secondary file {2}'.format(sumuce,summouse,sfile)
+		print_number_features(scoord,qcoord,sfile,quinaryfiles)
 		
 		# remove all secondary regions with no primary overlaps
 		cleanintersect = remove_rows_with_no_overlaps(concatintersect,'intersect_primary')
@@ -412,8 +482,10 @@ def main():
 		# fold the data frame by combining edges for the pointplot
 		foldbin = fold_formated_binned_data_sum(formatbin,bins)
 		
+		lumpprimarybinned.append(foldbin)
+		
 		# 6) generate graph for bin results
-		graph_binned_regions_no_tertiary(foldbin,'bincounts_{0}_{1}.pdf'.format(primaryfile,sfile))
+		graph_binned_regions_no_tertiary(foldbin,'bincounts_uces_{0}_{1}.pdf'.format(primaryfile,sfile))
 		
 		# format data for boxplot graphs of secondary size
 		secondarysum = format_with_without_data_for_boxplot(concatintersect,'size',quinaryfiles)
@@ -446,9 +518,19 @@ def main():
 			
 			# format the data frame with the filename as a column
 			formatdf = format_binned_dataframe_for_boxplot(dropzero,bins)
+			formatbin = format_binned_data_sum_for_graphing(dropzero,bins)
 			
 			# fold the data frame by combining edges for the boxplot
 			folddf = fold_formated_binned_data_df(formatdf,bins)
+			
+			tertiarybin = formatbin[formatbin['filename']=='bincounts_count_{0}'.format(tfile)].reset_index(drop=True)
+			
+			foldbin = fold_formated_binned_data_sum(tertiarybin,bins)
+			
+			lumptertiarybinned.append(foldbin)
+			
+			# dot plot with gene size for uce-domain intersected regions
+			graph_binned_regions_no_tertiary(foldbin,'bincounts_genes_{0}_{1}_{2}.pdf'.format(primaryfile,sfile,tfile))
 			
 			# normalize the values by total counts per each data set
 			normalizedprimary = normalize_by_total_count(bins,folddf,'bincounts_count_primary',lengthprimary)
@@ -457,8 +539,8 @@ def main():
 			
 			meltnormalized = pd.melt(catnormalized,id_vars=['filename'])
 			
-			# graph
-			graph_boxplot_binned_regions(meltnormalized,'bincount_dist_{0}_{1}.pdf'.format(primaryfile,sfile))
+			# graph normalized by total count elements - non-functional!
+# 			graph_boxplot_binned_regions(meltnormalized,'bincount_dist_{0}_{1}.pdf'.format(primaryfile,sfile))
 			
 			# 5) generate stats results
 			primarystats = panda_describe_single_column(primary,'size_primary')
@@ -476,11 +558,7 @@ def main():
 			alltertiarystats = pd.concat([intersectstats,primarystats,tertiarystats],axis=1)
 			
 			# make sure names are clear
-			alltertiarystats.rename(columns={'intersect_primary':'intersect_{0}_{1}'.format(primaryfile,sfile)},inplace=True)
-			alltertiarystats.rename(columns={'intersect_{0}'.format(tfile):'intersect_{0}_{1}'.format(tfile,sfile)},inplace=True)
-			alltertiarystats.rename(columns={'intersect_{0}'.format(quinaryfiles):'intersect_{0}_{1}'.format(quinaryfiles,sfile)},inplace=True)
-			alltertiarystats.rename(columns={'size'.format(tfile):'size_{0}'.format(sfile)},inplace=True)
-			alltertiarystats.rename(columns={'size_primary'.format(tfile):'size_{0}'.format(primaryfile)},inplace=True)
+			alltertiarystats = rename_stats_columns(alltertiarystats,primaryfile,sfile,tfile,quinaryfiles)
 			
 			# save stats to file
 			save_panda(alltertiarystats,'stats_{0}_intersection.txt'.format(primaryfile))
@@ -488,9 +566,31 @@ def main():
 			# format data for boxplot graphs of tertiary feature counts
 			tertiarysum = format_with_without_data_for_boxplot(concatintersect,'intersect_{0}'.format(tfile),quinaryfiles)
 			
-			# graph counts for tertiary features
-			graph_boxplot_region_size(tertiarysum,'genecount_{0}_{1}.pdf'.format(sfile,tfile),'intersect_{0}'.format(tfile),'Frequency')
+			tertiarysum.rename(columns={'intersect_{0}'.format(tfile):'intersect_tertiary'},inplace=True)
+			lumptertiarysum.append(tertiarysum)
 			
+			# graph counts for tertiary features
+			graph_boxplot_region_size(tertiarysum,'genecount_{0}_{1}.pdf'.format(sfile,tfile),'intersect_tertiary','Frequency')
+			
+	
+	# concat all the primary elements in the binned secondary regions
+	catprimarybin = pd.concat(lumpprimarybinned)
+	
+	# graph the primary binned elements for all secondary features
+	graph_binned_regions_no_tertiary(catprimarybin,'bincounts_uces_all.pdf')
+	
+	# concat all the tertiary elements in the binned secondary regions
+	cattertiarybin = pd.concat(lumptertiarybinned)
+	
+	# graph the binned tertiary elements for all secondary features
+	graph_binned_regions_no_tertiary(cattertiarybin,'bincounts_genes_all.pdf')
+	
+	# concat all the tertiary sums
+	cattertiarysum = pd.concat(lumptertiarysum)
+	
+	# graph the tertiary sums in box plot
+	graph_boxplot_region_size(cattertiarysum,'genecount_all.pdf','intersect_tertiary','Frequency')
+	
 	# make the stats data frame for all the secondary features
 	concatsecondary = pd.concat(lumpsecondaryfilestats)
 	concatsecondary.rename(columns={'size':'size_all_secondary'},inplace=True)
@@ -501,11 +601,14 @@ def main():
 	
 	totalsum = format_with_without_data_for_boxplot(concatsecondaryfull,'size',quinaryfiles)
 	
-	# graph counts for tertiary features
+	# graph counts for all secondary feature sizes
 	graph_boxplot_region_size(totalsum,'domainsize_all.pdf','size','Size (bp)')
 	
 	# save stats to file
 	save_panda(catsecondarystats,'stats_{0}_intersection.txt'.format(primaryfile))
+
+	# tile all the concated 'all' graphs
+	tile_all_collected_features(catprimarybin,cattertiarybin,totalsum,cattertiarysum,'all_tiled_graphs.pdf')
 
 if __name__ == "__main__":
 	main()
