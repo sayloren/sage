@@ -237,7 +237,7 @@ def format_with_without_data_for_boxplot(pdfeatures,column,quinaryfiles):
 	keepzero = (pdfeatures.loc[pdfeatures['intersect_primary'] < 1])
 	sumkeep = keepzero[column].reset_index(drop=False)
 	sumkeep['primary'] = 'Regions Without UCEs'
-	keepquin = (pdfeatures.loc[pdfeatures['intersect_{0}'.format(quinaryfiles)] < 1])
+	keepquin = (pdfeatures.loc[pdfeatures['intersect_{0}'.format(quinaryfiles)] > 0])
 	sumquin = keepquin[column].reset_index(drop=False)
 	sumquin['primary'] = 'Regions With Mouse UCEs'
 	tertiarysum = pd.concat([sumdrop,sumkeep,sumquin])
@@ -363,6 +363,7 @@ def main():
 	# get the number of primary features
 	pdprimary = convert_bedtools_to_panda(primary)
 	lengthprimary = len(pdprimary)
+	print 'there are {0} elements in {1}'.format(lengthprimary,primaryfile)
 	
 	lumpsecondaryfilestats = []
 	lumpsecondaryfilesfull = []
@@ -376,12 +377,22 @@ def main():
 		nooverlaps = count_number_with_zero_overlaps(scoord,'intersect_primary')
 		print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
 		
+		# get the number of quinary features
+		quinary = get_bedtools_features(quinaryfiles)
+		pdquinary = convert_bedtools_to_panda(quinary)
+		lengthquinary = len(pdquinary)
+		print 'there are {0} elements in {1}'.format(lengthquinary,quinaryfiles)
+		
 		# make quinary intersections
-		quinary = intersect_bedfiles_c_true(secondary,quinaryfiles)
-		qfeatures = convert_bedtools_to_panda(quinary)
-		qcoord = label_coordinate_columns(qfeatures)
-		qcoord.columns.values[3]='intersect_{0}'.format(quinaryfiles)
-		concatintersect = pd.merge(scoord,qcoord,how='left',on=['chr','start','end','size'])
+		tempsecondary,qcoord = overlaping_features(quinary,sfile)
+		qcoord.rename(columns={'intersect_primary':'intersect_{0}'.format(quinaryfiles)},inplace=True)
+		qcoord.drop(labels=['id'],axis=1,inplace=True)
+		concatintersect = scoord.merge(qcoord,how='left',on=['chr','start','end','size'])
+		
+		# get the number of uces in the secondary file
+		sumuce = scoord['intersect_primary'].sum()
+		summouse = qcoord['intersect_{0}'.format(quinaryfiles)].sum()
+		print '{0} total uces, {1} mouse uces that are overlapped in secondary file {2}'.format(sumuce,summouse,sfile)
 		
 		# remove all secondary regions with no primary overlaps
 		cleanintersect = remove_rows_with_no_overlaps(concatintersect,'intersect_primary')
@@ -405,7 +416,7 @@ def main():
 		graph_binned_regions_no_tertiary(foldbin,'bincounts_{0}_{1}.pdf'.format(primaryfile,sfile))
 		
 		# format data for boxplot graphs of secondary size
-		secondarysum = format_with_without_data_for_boxplot(concatintersect,'size',quinaryfiles) # scoord
+		secondarysum = format_with_without_data_for_boxplot(concatintersect,'size',quinaryfiles)
 		
 		# graph size for secondary regions
 		graph_boxplot_region_size(secondarysum,'domainsize_{0}.pdf'.format(sfile),'size','Size (bp)')
@@ -475,7 +486,7 @@ def main():
 			save_panda(alltertiarystats,'stats_{0}_intersection.txt'.format(primaryfile))
 			
 			# format data for boxplot graphs of tertiary feature counts
-			tertiarysum = format_with_without_data_for_boxplot(concatintersect,'intersect_{0}'.format(tfile),quinaryfiles) #intersect
+			tertiarysum = format_with_without_data_for_boxplot(concatintersect,'intersect_{0}'.format(tfile),quinaryfiles)
 			
 			# graph counts for tertiary features
 			graph_boxplot_region_size(tertiarysum,'genecount_{0}_{1}.pdf'.format(sfile,tfile),'intersect_{0}'.format(tfile),'Frequency')
