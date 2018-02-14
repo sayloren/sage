@@ -190,17 +190,17 @@ def additional_features_locate(secondary,tertiary,tfile,scoord,windows):
 	pdgroup = group_df_by_secondary_regions(concatintersect)
 	return pdgroup
 
-# 6a) remove the rows where there are no primary element overlaps with the secondary regions
+# remove the rows where there are no primary element overlaps with the secondary regions
 def drop_primary_zero_list(pdfeatures,column):
 	thresh = pdfeatures[~pdfeatures[column].apply(lambda row: all(item ==0 for item in row))]
 	return thresh
 
-# 6b) keep only those rows where there are no primary element overlaps with the secondary regions
+# keep only those rows where there are no primary element overlaps with the secondary regions
 def keep_primary_zero_list(pdfeatures,column):
 	thresh = pdfeatures[pdfeatures[column].apply(lambda row: all(item ==0 for item in row))]
 	return thresh
 
-# 6ci) format the binned data frame for pointplot graphing
+# format the binned data frame for pointplot graphing
 def format_binned_data_sum_for_graphing(pdfeatures,bins):
 	selectcols = [col for col in pdfeatures.columns if 'bincounts' in col]
 	listsum = []
@@ -217,7 +217,7 @@ def format_binned_data_sum_for_graphing(pdfeatures,bins):
 	format['bin'] = bincolumns * (format.shape[0]/len(bincolumns))
 	return format
 
-# 6cii) format the binned data frame for box plot graphing
+# format the binned data frame for box plot graphing
 def format_binned_dataframe_for_boxplot(pdfeatures,bins):
 	selectcols = [col for col in pdfeatures.columns if 'bincounts' in col]
 	listdf = []
@@ -229,7 +229,7 @@ def format_binned_dataframe_for_boxplot(pdfeatures,bins):
 	concatdf = pd.concat(listdf,axis=0)
 	return concatdf
 
-# 6ciii) format the with/without regions for graphing
+# format the with/without regions for graphing
 def format_with_without_data_for_boxplot(pdfeatures,column,quinaryfiles):
 	dropzero = (pdfeatures.loc[pdfeatures['intersect_primary'] > 0])
 	sumdrop = dropzero[column].reset_index(drop=False)
@@ -244,7 +244,7 @@ def format_with_without_data_for_boxplot(pdfeatures,column,quinaryfiles):
 	tertiarysum.drop(columns=['index'],inplace=True)
 	return tertiarysum
 
-# 6di) fold data set sums
+# fold data set sums
 def fold_formated_binned_data_sum(pdfeatures,bins):
 	halfbin = bins/2
 	pdfeatures['invertsumbin'] = pdfeatures['sumbin'].iloc[::-1].reset_index(drop=True)
@@ -254,7 +254,7 @@ def fold_formated_binned_data_sum(pdfeatures,bins):
 	dropfeatures.columns = ['filename','sumbin','bin']
 	return dropfeatures
 
-# 6dii) fold data set 
+# fold data set 
 def fold_formated_binned_data_df(pdfeatures,bins):
 	filefeatures = pdfeatures[['filename']]
 	pdfeatures.drop('filename',axis=1,inplace=True)
@@ -266,7 +266,7 @@ def fold_formated_binned_data_df(pdfeatures,bins):
 	catfeatures = pd.concat([halffeatures,filefeatures],axis=1)
 	return catfeatures
 
-# 6ei) line graph binned data with no tertiary features
+# line graph binned data with no tertiary features
 def graph_binned_regions_no_tertiary(pdfeatures,filename):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
@@ -289,7 +289,7 @@ def graph_binned_regions_no_tertiary(pdfeatures,filename):
 	pp.savefig()
 	pp.close()
 
-# 6eii) normalize data
+# normalize data
 def normalize_by_total_count(bins,df,filename,length):
 	halfbin = bins/2
 	subsetprimaryfiles = df[df['filename']==filename]
@@ -298,7 +298,7 @@ def normalize_by_total_count(bins,df,filename,length):
 	normalizeprimary['filename'] = filename
 	return normalizeprimary
 
-# 6eiii) graph box plots for secondary and tertiary data - will have to put in the y axis label as arg
+# graph box plots for secondary and tertiary data - will have to put in the y axis label as arg
 def graph_boxplot_region_size(pdfeatures,filename,yvalue,ylabeltext):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
@@ -320,7 +320,7 @@ def graph_boxplot_region_size(pdfeatures,filename,yvalue,ylabeltext):
 	pp.savefig()
 	pp.close()
 
-# 6fii) graph box plots for secondary and tertiary data over binned regions
+# graph box plots for secondary and tertiary data over binned regions
 def graph_boxplot_binned_regions(pdfeatures,filename):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
@@ -377,12 +377,12 @@ def rename_stats_columns(alltertiarystats,primaryfile,sfile,tfile,quinaryfiles):
 def tile_all_collected_features(graphone,graphtwo,graphthree,graphfour,filename):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
-	plt.figure(figsize=(14,7))
+	plt.figure(figsize=(10,10))
 	
 	sns.set_palette("Blues")
 	
 	gs = gridspec.GridSpec(2,2)
-	gs.update(hspace=.8)
+	gs.update(hspace=.5)
 	
 	ax0 = plt.subplot(gs[0,0])
 	sns.pointplot(data=graphone,x='bin',y='sumbin',color='#9ecae1',scale=3)
@@ -416,6 +416,106 @@ def tile_all_collected_features(graphone,graphtwo,graphthree,graphfour,filename)
 	pp.savefig()
 	pp.close()
 
+# run the graphs for the lumped all datasets
+def lumped_all_data_set_graphs(allstats,allsecsize,allbinprime,allbintert,allsumtert,pfile,qfiles):
+	# concat all the primary elements in the binned secondary regions
+	catprimarybin = pd.concat(allbinprime)
+	# graph the primary binned elements for all secondary features
+# 	graph_binned_regions_no_tertiary(catprimarybin,'bincounts_uces_all.pdf')
+	# concat all the tertiary elements in the binned secondary regions
+	cattertiarybin = pd.concat(allbintert)
+	# graph the binned tertiary elements for all secondary features
+# 	graph_binned_regions_no_tertiary(cattertiarybin,'bincounts_genes_all.pdf')
+	# concat all the tertiary sums
+	cattertiarysum = pd.concat(allsumtert)
+	totaltert = format_with_without_data_for_boxplot(cattertiarysum,'intersect_tertiary',qfiles)
+	# graph the tertiary sums in box plot
+# 	graph_boxplot_region_size(totaltert,'genecount_all.pdf','intersect_tertiary','Frequency')
+	# make the stats data frame for all the secondary features
+	concatsecondary = pd.concat(allstats)
+	concatsecondary.rename(columns={'size':'size_all_secondary'},inplace=True)
+	catsecondarystats = panda_describe_multiple_column(concatsecondary)
+	# format data for boxplot graphs of secondary size
+	concatsecondaryfull = pd.concat(allsecsize)
+	totalsec = format_with_without_data_for_boxplot(concatsecondaryfull,'size',qfiles)
+	# graph counts for all secondary feature sizes
+# 	graph_boxplot_region_size(totalsec,'domainsize_all.pdf','size','Size (bp)')
+	# save stats to file
+	save_panda(catsecondarystats,'stats_{0}_intersection.txt'.format(pfile))
+	# tile all the concated 'all' graphs
+	tile_all_collected_features(catprimarybin,cattertiarybin,totalsec,totaltert,'tiled_all_graphs.pdf')
+
+# tile the boxplots
+def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filename,quinaryfiles):
+	sns.set_style('ticks')
+	pp = PdfPages(filename)
+	plt.figure(figsize=(10,10))
+	plt.rcParams['axes.formatter.limits'] = (-3, 3)
+	sns.set_palette("Blues")
+	ncols = 2
+	intnum = len(names)
+	if intnum % 2 ==0:
+		nrows = intnum/2
+		fig,ax_array = plt.subplots(nrows,ncols)
+	elif intnum % 2 != 0:
+		nrows = (intnum/2) + 1
+		fig,ax_array = plt.subplots(nrows,ncols)
+	intPlotCounter = -1
+	for i,ax_row in enumerate(ax_array):
+		for j,axes in enumerate(ax_row):
+			intPlotCounter += 1
+			if intPlotCounter < len(pddata):
+				pdgroup = format_with_without_data_for_boxplot(pddata[intPlotCounter],yvalue,quinaryfiles)
+				sns.boxplot(data=pdgroup,x='primary',y=yvalue,showfliers=False,ax=axes)
+				axes.set_ylabel(ylabeltext,size=12)
+				axes.set_xlabel('')
+				axes.set_title(names[intPlotCounter],size=8)
+				for item in ([axes.xaxis.label] + axes.get_xticklabels()):
+					item.set_fontsize(8)
+				plt.setp(axes.xaxis.get_majorticklabels(),rotation=15)
+			else:
+				pass
+	if intnum % 2 != 0:
+		fig.delaxes(ax_array[intnum / 2, 1])
+	plt.tight_layout()
+	sns.despine()
+	pp.savefig()
+	plt.clf()
+	pp.close()
+
+# tile the point plots
+def run_tiled_subplots_per_binned_dataset(pddata,names,filename):
+	sns.set_style('ticks')
+	pp = PdfPages(filename)
+	plt.figure(figsize=(10,10))
+	ncols = 2
+	intnum = len(names)
+	if intnum % 2 ==0:
+		nrows = intnum/2
+		fig,ax_array = plt.subplots(nrows,ncols)
+	elif intnum % 2 != 0:
+		nrows = (intnum/2) + 1
+		fig,ax_array = plt.subplots(nrows,ncols)
+	intPlotCounter = -1
+	for i,ax_row in enumerate(ax_array):
+		for j,axes in enumerate(ax_row):
+			intPlotCounter += 1
+			if intPlotCounter < len(pddata):
+				pdgroup = pddata[intPlotCounter]
+				sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=2,ax=axes)
+				axes.set_ylabel('Frequency',size=12)
+				axes.set_xlabel('Bin Distance from Edge')
+				axes.set_title(names[intPlotCounter],size=8)
+			else:
+				pass
+	if intnum % 2 != 0:
+		fig.delaxes(ax_array[intnum / 2, 1])
+	plt.tight_layout()
+	sns.despine()
+	pp.savefig()
+	plt.clf()
+	pp.close()
+
 
 def main():
 	args = get_args()
@@ -440,11 +540,14 @@ def main():
 	lengthprimary = len(pdprimary)
 	print 'there are {0} elements in {1}'.format(lengthprimary,primaryfile)
 	
-	lumpsecondaryfilestats = []
-	lumpsecondaryfilesfull = []
-	lumpprimarybinned = []
-	lumptertiarybinned = []
-	lumptertiarysum = []
+	# initiate collections
+	lumpstats = []
+	lumpsecondary = []
+	lumpprimarybin = []
+	lumptertiarybin = []
+	lumptertiary = []
+	
+	lumptertiary = []
 	
 	# process feature files
 	for sfile in secondaryfiles:
@@ -482,20 +585,20 @@ def main():
 		# fold the data frame by combining edges for the pointplot
 		foldbin = fold_formated_binned_data_sum(formatbin,bins)
 		
-		lumpprimarybinned.append(foldbin)
+		lumpprimarybin.append(foldbin)
 		
-		# 6) generate graph for bin results
-		graph_binned_regions_no_tertiary(foldbin,'bincounts_uces_{0}_{1}.pdf'.format(primaryfile,sfile))
+		# generate graph for bin results
+# 		graph_binned_regions_no_tertiary(foldbin,'bincounts_uces_{0}_{1}.pdf'.format(primaryfile,sfile))
 		
 		# format data for boxplot graphs of secondary size
 		secondarysum = format_with_without_data_for_boxplot(concatintersect,'size',quinaryfiles)
 		
 		# graph size for secondary regions
-		graph_boxplot_region_size(secondarysum,'domainsize_{0}.pdf'.format(sfile),'size','Size (bp)')
+# 		graph_boxplot_region_size(secondarysum,'domainsize_{0}.pdf'.format(sfile),'size','Size (bp)')
 		
 		# add the primary x secondary intersections data to the list for lump secondary stats
-		lumpsecondaryfilestats.append(cleanintersect)
-		lumpsecondaryfilesfull.append(concatintersect)
+		lumpstats.append(cleanintersect)
+		lumpsecondary.append(concatintersect)
 		
 		# for contrast with tertiary features
 		for tfile in tertiaryfiles:
@@ -527,10 +630,10 @@ def main():
 			
 			foldbin = fold_formated_binned_data_sum(tertiarybin,bins)
 			
-			lumptertiarybinned.append(foldbin)
+			lumptertiarybin.append(foldbin)
 			
 			# dot plot with gene size for uce-domain intersected regions
-			graph_binned_regions_no_tertiary(foldbin,'bincounts_genes_{0}_{1}_{2}.pdf'.format(primaryfile,sfile,tfile))
+# 			graph_binned_regions_no_tertiary(foldbin,'bincounts_genes_{0}_{1}_{2}.pdf'.format(primaryfile,sfile,tfile))
 			
 			# normalize the values by total counts per each data set
 			normalizedprimary = normalize_by_total_count(bins,folddf,'bincounts_count_primary',lengthprimary)
@@ -567,48 +670,28 @@ def main():
 			tertiarysum = format_with_without_data_for_boxplot(concatintersect,'intersect_{0}'.format(tfile),quinaryfiles)
 			
 			tertiarysum.rename(columns={'intersect_{0}'.format(tfile):'intersect_tertiary'},inplace=True)
-			lumptertiarysum.append(tertiarysum)
+			concatintersect.rename(columns={'intersect_{0}'.format(tfile):'intersect_tertiary'},inplace=True)
+			
+# 			lumptertiary.append(tertiarysum)
+			lumptertiary.append(concatintersect)
 			
 			# graph counts for tertiary features
-			graph_boxplot_region_size(tertiarysum,'genecount_{0}_{1}.pdf'.format(sfile,tfile),'intersect_tertiary','Frequency')
-			
+# 			graph_boxplot_region_size(tertiarysum,'genecount_{0}_{1}.pdf'.format(sfile,tfile),'intersect_tertiary','Frequency')
 	
-	# concat all the primary elements in the binned secondary regions
-	catprimarybin = pd.concat(lumpprimarybinned)
+	# run the tile plot secondary sizes
+	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (bp)',secondaryfiles,'tiled_domain_sizes.pdf',quinaryfiles)
 	
-	# graph the primary binned elements for all secondary features
-	graph_binned_regions_no_tertiary(catprimarybin,'bincounts_uces_all.pdf')
+	# run tile plot for tertiary counts
+	run_tiled_subplots_per_boxplot_dataset(lumptertiary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number.pdf',quinaryfiles)
 	
-	# concat all the tertiary elements in the binned secondary regions
-	cattertiarybin = pd.concat(lumptertiarybinned)
+	# run tile plot for primaries binned
+	run_tiled_subplots_per_binned_dataset(lumpprimarybin,secondaryfiles,'tiled_binned_UCEs.pdf')
 	
-	# graph the binned tertiary elements for all secondary features
-	graph_binned_regions_no_tertiary(cattertiarybin,'bincounts_genes_all.pdf')
+	# run tile plot for tertiary binned
+	run_tiled_subplots_per_binned_dataset(lumptertiarybin,secondaryfiles,'tiled_binned_genes.pdf')
 	
-	# concat all the tertiary sums
-	cattertiarysum = pd.concat(lumptertiarysum)
-	
-	# graph the tertiary sums in box plot
-	graph_boxplot_region_size(cattertiarysum,'genecount_all.pdf','intersect_tertiary','Frequency')
-	
-	# make the stats data frame for all the secondary features
-	concatsecondary = pd.concat(lumpsecondaryfilestats)
-	concatsecondary.rename(columns={'size':'size_all_secondary'},inplace=True)
-	catsecondarystats = panda_describe_multiple_column(concatsecondary)
-	
-	# format data for boxplot graphs of secondary size
-	concatsecondaryfull = pd.concat(lumpsecondaryfilesfull)
-	
-	totalsum = format_with_without_data_for_boxplot(concatsecondaryfull,'size',quinaryfiles)
-	
-	# graph counts for all secondary feature sizes
-	graph_boxplot_region_size(totalsum,'domainsize_all.pdf','size','Size (bp)')
-	
-	# save stats to file
-	save_panda(catsecondarystats,'stats_{0}_intersection.txt'.format(primaryfile))
-
-	# tile all the concated 'all' graphs
-	tile_all_collected_features(catprimarybin,cattertiarybin,totalsum,cattertiarysum,'all_tiled_graphs.pdf')
+	# run the lump all graphs
+	lumped_all_data_set_graphs(lumpstats,lumpsecondary,lumpprimarybin,lumptertiarybin,lumptertiary,primaryfile,quinaryfiles)
 
 if __name__ == "__main__":
 	main()
