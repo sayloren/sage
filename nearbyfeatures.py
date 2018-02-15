@@ -377,7 +377,7 @@ def rename_stats_columns(alltertiarystats,primaryfile,sfile,tfile,quinaryfiles):
 def tile_all_collected_features(graphone,graphtwo,graphthree,graphfour,filename):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
-	plt.figure(figsize=(10,10))
+	plt.figure(figsize=(12,7))
 	
 	sns.set_palette("Blues")
 	
@@ -404,14 +404,15 @@ def tile_all_collected_features(graphone,graphtwo,graphthree,graphfour,filename)
 	ax2.set_xlabel('')
 	for item in ([ax2.title, ax2.xaxis.label, ax2.yaxis.label] + ax2.get_yticklabels()):
 		item.set_fontsize(22)
-
+	plt.setp(ax2.xaxis.get_majorticklabels(),rotation=15)
+	
 	ax3 = plt.subplot(gs[1,1])
 	sns.boxplot(data=graphfour,x='primary',y='intersect_tertiary',showfliers=False)
 	ax3.set_ylabel('Frequency')
 	ax3.set_xlabel('')
 	for item in ([ax3.title, ax3.xaxis.label, ax3.yaxis.label] + ax3.get_yticklabels()):
 		item.set_fontsize(22)
-
+	plt.setp(ax3.xaxis.get_majorticklabels(),rotation=15)
 	sns.despine()
 	pp.savefig()
 	pp.close()
@@ -452,36 +453,40 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 	plt.figure(figsize=(10,10))
 	plt.rcParams['axes.formatter.limits'] = (-3, 3)
 	sns.set_palette("Blues")
-	ncols = 2
-	intnum = len(names)
-	if intnum % 2 ==0:
-		nrows = intnum/2
-		fig,ax_array = plt.subplots(nrows,ncols)
-	elif intnum % 2 != 0:
-		nrows = (intnum/2) + 1
-		fig,ax_array = plt.subplots(nrows,ncols)
-	intPlotCounter = -1
-	for i,ax_row in enumerate(ax_array):
-		for j,axes in enumerate(ax_row):
-			intPlotCounter += 1
-			if intPlotCounter < len(pddata):
-				pdgroup = format_with_without_data_for_boxplot(pddata[intPlotCounter],yvalue,quinaryfiles)
-				sns.boxplot(data=pdgroup,x='primary',y=yvalue,showfliers=False,ax=axes)
-				axes.set_ylabel(ylabeltext,size=12)
-				axes.set_xlabel('')
-				axes.set_title(names[intPlotCounter],size=8)
-				for item in ([axes.xaxis.label] + axes.get_xticklabels()):
-					item.set_fontsize(8)
-				plt.setp(axes.xaxis.get_majorticklabels(),rotation=15)
-			else:
-				pass
-	if intnum % 2 != 0:
-		fig.delaxes(ax_array[intnum / 2, 1])
 	plt.tight_layout()
 	sns.despine()
-	pp.savefig()
+
+# 	if intnum % 2 != 0:
+# 		fig.delaxes(ax_array[intnum / 2, 1])
+
+	datasetcounter = 0
+	fig,ax_array = plt.subplots(3,2)
+	intnum = len(names)
+	for data_chunk,name_chunk in zip(chunks(pddata,6),chunks(names,6)):
+		intPlotCounter = -1
+		for i,ax_row in enumerate(ax_array):
+			for j,axes in enumerate(ax_row):
+				intPlotCounter += 1
+				if datasetcounter < len(names):
+					pdgroup = format_with_without_data_for_boxplot(data_chunk[intPlotCounter],yvalue,quinaryfiles)
+					sns.boxplot(data=pdgroup,x='primary',y=yvalue,showfliers=False,ax=axes)
+					axes.set_ylabel(ylabeltext,size=12)
+					axes.set_xlabel('')
+					axes.set_title(name_chunk[intPlotCounter],size=8)
+					for item in ([axes.xaxis.label] + axes.get_xticklabels()):
+						item.set_fontsize(8)
+					plt.setp(axes.xaxis.get_majorticklabels(),rotation=15)
+					datasetcounter += 1
+				else:
+					pass
+		plt.savefig(pp, format='pdf')
 	plt.clf()
 	pp.close()
+
+# chunk data into number of graphs per page
+def chunks(l, n):
+	for i in range(0, len(l), n):
+		yield l[i:i + n]
 
 # tile the point plots
 def run_tiled_subplots_per_binned_dataset(pddata,names,filename):
@@ -502,7 +507,7 @@ def run_tiled_subplots_per_binned_dataset(pddata,names,filename):
 			intPlotCounter += 1
 			if intPlotCounter < len(pddata):
 				pdgroup = pddata[intPlotCounter]
-				sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=2,ax=axes)
+				sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
 				axes.set_ylabel('Frequency',size=12)
 				axes.set_xlabel('Bin Distance from Edge')
 				axes.set_title(names[intPlotCounter],size=8)
@@ -515,7 +520,6 @@ def run_tiled_subplots_per_binned_dataset(pddata,names,filename):
 	pp.savefig()
 	plt.clf()
 	pp.close()
-
 
 def main():
 	args = get_args()
