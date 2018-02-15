@@ -453,17 +453,12 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 	plt.figure(figsize=(10,10))
 	plt.rcParams['axes.formatter.limits'] = (-3, 3)
 	sns.set_palette("Blues")
-	plt.tight_layout()
-	sns.despine()
-
-# 	if intnum % 2 != 0:
-# 		fig.delaxes(ax_array[intnum / 2, 1])
-
 	datasetcounter = 0
 	fig,ax_array = plt.subplots(3,2)
 	intnum = len(names)
 	for data_chunk,name_chunk in zip(chunks(pddata,6),chunks(names,6)):
 		intPlotCounter = -1
+# 		[axes.cla() for ax in ax_array]
 		for i,ax_row in enumerate(ax_array):
 			for j,axes in enumerate(ax_row):
 				intPlotCounter += 1
@@ -479,7 +474,11 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 					datasetcounter += 1
 				else:
 					pass
+		plt.tight_layout()
+		sns.despine()
 		plt.savefig(pp, format='pdf')
+# 	if intnum % 2 != 0:
+# 		fig.delaxes(ax_array[intnum / 2, 1])
 	plt.clf()
 	pp.close()
 
@@ -493,31 +492,51 @@ def run_tiled_subplots_per_binned_dataset(pddata,names,filename):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
 	plt.figure(figsize=(10,10))
-	ncols = 2
+# 	ncols = 2
+# 	intnum = len(names)
+# 	if intnum % 2 ==0:
+# 		nrows = intnum/2
+# 		fig,ax_array = plt.subplots(nrows,ncols)
+# 	elif intnum % 2 != 0:
+# 		nrows = (intnum/2) + 1
+# 		fig,ax_array = plt.subplots(nrows,ncols)
+# 	intPlotCounter = -1
+# 	for i,ax_row in enumerate(ax_array):
+# 		for j,axes in enumerate(ax_row):
+# 			intPlotCounter += 1
+# 			if intPlotCounter < len(pddata):
+# 				pdgroup = pddata[intPlotCounter]
+# 				sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
+# 				axes.set_ylabel('Frequency',size=12)
+# 				axes.set_xlabel('Bin Distance from Edge')
+# 				axes.set_title(names[intPlotCounter],size=8)
+# 			else:
+# 				pass
+	datasetcounter = 0
+	fig,ax_array = plt.subplots(3,2)
 	intnum = len(names)
-	if intnum % 2 ==0:
-		nrows = intnum/2
-		fig,ax_array = plt.subplots(nrows,ncols)
-	elif intnum % 2 != 0:
-		nrows = (intnum/2) + 1
-		fig,ax_array = plt.subplots(nrows,ncols)
-	intPlotCounter = -1
-	for i,ax_row in enumerate(ax_array):
-		for j,axes in enumerate(ax_row):
-			intPlotCounter += 1
-			if intPlotCounter < len(pddata):
-				pdgroup = pddata[intPlotCounter]
-				sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
-				axes.set_ylabel('Frequency',size=12)
-				axes.set_xlabel('Bin Distance from Edge')
-				axes.set_title(names[intPlotCounter],size=8)
-			else:
-				pass
-	if intnum % 2 != 0:
-		fig.delaxes(ax_array[intnum / 2, 1])
-	plt.tight_layout()
-	sns.despine()
-	pp.savefig()
+	for data_chunk,name_chunk in zip(chunks(pddata,6),chunks(names,6)):
+		intPlotCounter = -1
+		for i,ax_row in enumerate(ax_array):
+			for j,axes in enumerate(ax_row):
+				intPlotCounter += 1
+				if datasetcounter < len(names):
+					pdgroup = data_chunk[intPlotCounter]
+					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
+					axes.set_ylabel('Frequency',size=12)
+					axes.set_xlabel('Bin Distance from Edge')
+					axes.set_title(name_chunk[intPlotCounter],size=8)
+					for item in ([axes.xaxis.label] + axes.get_xticklabels()):
+						item.set_fontsize(8)
+					plt.setp(axes.xaxis.get_majorticklabels(),rotation=15)
+					datasetcounter += 1
+				else:
+					pass
+		plt.tight_layout()
+		sns.despine()
+		plt.savefig(pp, format='pdf')
+# 		if intnum % 2 != 0:
+# 			fig.delaxes(ax_array[intnum / 2, 1])
 	plt.clf()
 	pp.close()
 
