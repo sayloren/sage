@@ -458,27 +458,28 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 	intnum = len(names)
 	for data_chunk,name_chunk in zip(chunks(pddata,6),chunks(names,6)):
 		intPlotCounter = -1
-# 		[axes.cla() for ax in ax_array]
 		for i,ax_row in enumerate(ax_array):
 			for j,axes in enumerate(ax_row):
+				axes.cla()
 				intPlotCounter += 1
 				if datasetcounter < len(names):
 					pdgroup = format_with_without_data_for_boxplot(data_chunk[intPlotCounter],yvalue,quinaryfiles)
 					sns.boxplot(data=pdgroup,x='primary',y=yvalue,showfliers=False,ax=axes)
 					axes.set_ylabel(ylabeltext,size=12)
 					axes.set_xlabel('')
-					axes.set_title(name_chunk[intPlotCounter],size=8)
+					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
 					for item in ([axes.xaxis.label] + axes.get_xticklabels()):
 						item.set_fontsize(8)
 					plt.setp(axes.xaxis.get_majorticklabels(),rotation=15)
 					datasetcounter += 1
 				else:
+					axes.remove()
 					pass
 		plt.tight_layout()
 		sns.despine()
 		plt.savefig(pp, format='pdf')
-# 	if intnum % 2 != 0:
-# 		fig.delaxes(ax_array[intnum / 2, 1])
+# 		if intnum % 2 != 0:
+# 			fig.delaxes(ax_array[intnum / 2, 1])
 	plt.clf()
 	pp.close()
 
@@ -519,18 +520,20 @@ def run_tiled_subplots_per_binned_dataset(pddata,names,filename):
 		intPlotCounter = -1
 		for i,ax_row in enumerate(ax_array):
 			for j,axes in enumerate(ax_row):
+				axes.cla()
 				intPlotCounter += 1
 				if datasetcounter < len(names):
 					pdgroup = data_chunk[intPlotCounter]
 					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
 					axes.set_ylabel('Frequency',size=12)
 					axes.set_xlabel('Bin Distance from Edge')
-					axes.set_title(name_chunk[intPlotCounter],size=8)
+					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
 					for item in ([axes.xaxis.label] + axes.get_xticklabels()):
 						item.set_fontsize(8)
 					plt.setp(axes.xaxis.get_majorticklabels(),rotation=15)
 					datasetcounter += 1
 				else:
+					axes.remove()
 					pass
 		plt.tight_layout()
 		sns.despine()
