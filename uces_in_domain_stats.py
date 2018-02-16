@@ -42,7 +42,6 @@ def get_args():
 	parser.add_argument("-s","--secondaryfeatures",required=True,type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
 	parser.add_argument("-t","--tertiaryfeature",type=str,help="the tertiary elements file")# Genes
 	parser.add_argument("-q","--quinaryfeature",type=str,help="the quinary elements file - a subset of the primary features")# Mouse UCEs
-	parser.add_argument("-g","--genomefile",type=str,help="genome file",default='hg19.genome')
 	return parser.parse_args()
 
 # get bt features
@@ -115,7 +114,6 @@ def main():
 	secondaryfiles = [line.strip() for line in args.secondaryfeatures]
 	tfile = args.tertiaryfeature
 	qfile = args.quinaryfeature
-	genomefile = args.genomefile
 	
 	# print the number of features in single feature files
 	labelprimary = run_print_number_file_features(pfile)
