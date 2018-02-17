@@ -21,6 +21,14 @@ limitations under the License.
 Question: only plot genes that are in regions that also have uces?
 Question: plot the mouse uces against the total set?
 
+In:
+primary - uce file
+secondary - file with list of domain filenames
+bin - number of bins to seperate the genomic region into
+
+Out:
+pdf file with each of the domains in a seperate subplot, and all as the final most subplot
+
 """
 
 import argparse
