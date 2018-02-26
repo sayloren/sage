@@ -114,6 +114,10 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 	datasetcounter = 0
 	fig,ax_array = plt.subplots(3,2)
 	intnum = len(names)
+	if qfile:
+		numboxes,numlines = 3,9
+	else:
+		numboxes,numlines = 2,8
 	for data_chunk,name_chunk in zip(chunks(pddata,6),chunks(names,6)):
 		intPlotCounter = -1
 		for i,ax_row in enumerate(ax_array):
@@ -122,9 +126,17 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 				intPlotCounter += 1
 				if datasetcounter < len(names):
 					pdgroup = format_with_without_data_for_boxplot(data_chunk[intPlotCounter],yvalue,pfile,qfile)
-					sns.boxplot(data=pdgroup,x='region',y=yvalue,showfliers=False,ax=axes)
+					sns.boxplot(data=pdgroup,x='region',y=yvalue,showfliers=False,ax=axes,linewidth=.75)
 					axes.set_ylabel(ylabeltext,size=12)
 					axes.set_xlabel('')
+# 					#https://stackoverflow.com/questions/36874697/how-to-edit-properties-of-whiskers-fliers-caps-etc-in-seaborn-boxplot
+					for t,artist in enumerate(axes.artists):
+						artist.set_edgecolor('#000000')
+						for s in range(t*numboxes,t*numboxes+numlines):
+							line = axes.lines[s]
+							line.set_color('#000000')
+							line.set_mfc('#000000')
+							line.set_mec('#000000')
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
 					for item in ([axes.xaxis.label] + axes.get_xticklabels()):
 						item.set_fontsize(8)
@@ -138,6 +150,23 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 		plt.savefig(pp, format='pdf')
 	plt.clf()
 	pp.close()
+
+# def KSTest(aOverlapBP):
+#     "Returns the KS test statistic and p value for rejecting the null hypothesis that aOverlapBP follows a normal distribution with mean and sd equal to those of aOverlapBP"
+#     mean = float(sum(aOverlapBP)) / len(aOverlapBP)
+#     if len(aOverlapBP) < 1000:
+#         print 'Warning: number of iterations is < 1000; KS statistic may be unreliable'
+#     sd = getPopSD(aOverlapBP)
+#     rvNormMatched = stats.norm.rvs(loc=mean, scale=sd, size=len(aOverlapBP))
+#     npArOverlapBP = np.array(aOverlapBP)
+#     ksStat, KsPval = stats.ks_2samp(npArOverlapBP, rvNormMatched)
+#     if KsPval <= 0.05:
+#         strKSresult = "No"
+#         print 'KS statistic is significant: attention needed'
+#     else:
+#         strKSresult = "Yes"
+#         print 'KS statistic not significant: random overlaps appear normally distributed'
+#     return ksStat, KsPval, strKSresult
 
 def main():
 	args = get_args()
