@@ -41,6 +41,7 @@ from itertools import cycle
 import matplotlib
 import numpy as np
 from scipy import stats
+import math
 
 # set args
 def get_args():
@@ -116,6 +117,32 @@ def set_num_lines_to_color(qfile):
 		numboxes,numlines = 2,8
 	return numboxes,numlines
 
+# get standard deviation, from ruth's random region script
+def getPopSD(arObservedOverlaps):
+	floatLen = float(len(arObservedOverlaps))
+	floatMean = float(sum(arObservedOverlaps))/len(arObservedOverlaps)
+	dSumOfSquares = sum([((float(number) - floatMean) ** 2) for number in arObservedOverlaps])
+	dVariance = float(dSumOfSquares) / floatLen
+	return math.sqrt(dVariance)
+
+# ks test from ruth's random region script
+def KSTest(aOverlapBP):
+	"Returns the KS test statistic and p value for rejecting the null hypothesis that aOverlapBP follows a normal distribution with mean and sd equal to those of aOverlapBP"
+	mean = float(sum(aOverlapBP)) / len(aOverlapBP)
+	if len(aOverlapBP) < 1000:
+		print 'Warning: number of iterations is < 1000; KS statistic may be unreliable'
+	sd = getPopSD(aOverlapBP)
+	rvNormMatched = stats.norm.rvs(loc=mean, scale=sd, size=len(aOverlapBP))
+	npArOverlapBP = np.array(aOverlapBP)
+	ksStat, KsPval = stats.ks_2samp(npArOverlapBP, rvNormMatched)
+	if KsPval <= 0.05:
+		strKSresult = "No"
+		print 'KS statistic is significant: attention needed'
+	else:
+		strKSresult = "Yes"
+		print 'KS statistic not significant: random overlaps appear normally distributed'
+	return ksStat, KsPval, strKSresult
+
 # tile the boxplots
 def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filename,pfile,qfile):
 	sns.set_style('ticks')
@@ -151,16 +178,24 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 					for item in (axes.get_xticklabels()):
 						item.set_fontsize(8)
 					plt.setp(axes.xaxis.get_majorticklabels())#,rotation=15
-					#https://stackoverflow.com/questions/36578458/how-does-one-insert-statistical-annotations-stars-or-p-values-into-matplotlib
-					withoutuce = pdgroup[yvalue].loc[pdgroup['region']=='Without UCEs']
-					withuce = pdgroup[yvalue].loc[pdgroup['region']=='With UCEs']
-					ksStat, KsPval = stats.ks_2samp(withoutuce,withuce)
+					withuces = pdgroup[yvalue].loc[pdgroup['region']=='With UCEs']
+					withoutuces = pdgroup[yvalue].loc[pdgroup['region']=='Without UCEs']
+					ksStat,KsPval,strKSresult = KSTest(withuces)
+					if strKSresult == 'Yes':
+						statcoef, statpval = stats.ttest_ind(withuces,withoutuces)# or ttest_rel()
+						stattest = 'TT'
+						formatpval = '{:.01e}'.format(statpval)
+					else:
+						statcoef, statpval = stats.mannwhitneyu(withuces,withoutuces)
+						stattest = 'MW'
+						formatpval = '{:.01e}'.format(statpval)
 					if yvalue == 'size':
 						ylabelmax = pdgroup[yvalue].quantile(q=.99)+2
 					else:
 						ylabelmax = pdgroup[yvalue].quantile(q=.97)+2
 					axes.plot([0,0,1,1], [ylabelmax, ylabelmax+2, ylabelmax+2, ylabelmax], lw=.75, c=boxcolor)
-					axes.text((0+1)*.5, ylabelmax+2,'P-value: {:.01e}'.format(KsPval),ha='center',va='bottom',color=boxcolor,size=8,clip_on=False)
+					axes.text((0+1)*.5, ylabelmax+2,'{0}: {1}'.format(stattest,formatpval),ha='center',va='bottom',color=boxcolor,size=8,clip_on=False)
+					
 					datasetcounter += 1
 				else:
 					axes.remove()
