@@ -40,6 +40,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from itertools import cycle
 import matplotlib
 import numpy as np
+from scipy import stats
 
 # set args
 def get_args():
@@ -91,18 +92,29 @@ def chunks(l, n):
 def format_with_without_data_for_boxplot(pdfeatures,column,pfile,qfile):
 	dropzero = (pdfeatures.loc[pdfeatures['intersect_{0}'.format(pfile)] > 0])
 	sumdrop = dropzero[column].reset_index(drop=False)
-	sumdrop['region'] = 'Regions With UCEs'
+	sumdrop['region'] = 'With UCEs'
 	keepzero = (pdfeatures.loc[pdfeatures['intersect_{0}'.format(pfile)] < 1])
 	sumkeep = keepzero[column].reset_index(drop=False)
-	sumkeep['region'] = 'Regions Without UCEs'
+	sumkeep['region'] = 'Without UCEs'
 	tertiarysum = pd.concat([sumdrop,sumkeep])
 	if qfile:
 		keepquin = (pdfeatures.loc[pdfeatures['intersect_{0}'.format(qfile)] > 0])
 		sumquin = keepquin[column].reset_index(drop=False)
-		sumquin['region'] = 'Regions With Mouse UCEs'
+		sumquin['region'] = 'With Mouse UCEs'
 		tertiarysum = pd.concat([tertiarysum,sumquin])
 	tertiarysum.drop(columns=['index'],inplace=True)
+	#https://stackoverflow.com/questions/8362792/how-do-i-shift-the-decimal-place-in-python
+	if column == 'size':
+		tertiarysum['size'] /= 1000.
 	return tertiarysum
+
+# set the number of lines to darken on the boxplot
+def set_num_lines_to_color(qfile):
+	if qfile:
+		numboxes,numlines = 3,9
+	else:
+		numboxes,numlines = 2,8
+	return numboxes,numlines
 
 # tile the boxplots
 def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filename,pfile,qfile):
@@ -114,36 +126,41 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 	datasetcounter = 0
 	fig,ax_array = plt.subplots(3,2)
 	intnum = len(names)
-	if qfile:
-		numboxes,numlines = 3,9
-	else:
-		numboxes,numlines = 2,8
+	numboxes,numlines = set_num_lines_to_color(qfile)
 	for data_chunk,name_chunk in zip(chunks(pddata,6),chunks(names,6)):
 		intPlotCounter = -1
 		for i,ax_row in enumerate(ax_array):
 			for j,axes in enumerate(ax_row):
 				axes.cla()
+				boxcolor = '#000000'
 				intPlotCounter += 1
 				if datasetcounter < len(names):
 					pdgroup = format_with_without_data_for_boxplot(data_chunk[intPlotCounter],yvalue,pfile,qfile)
-					#https://stackoverflow.com/questions/8362792/how-do-i-shift-the-decimal-place-in-python
-					if yvalue == 'size':
-						pdgroup['size'] /= 1000.
 					sns.boxplot(data=pdgroup,x='region',y=yvalue,showfliers=False,ax=axes,linewidth=.75)
 					axes.set_ylabel(ylabeltext,size=12)
-					axes.set_xlabel('')
+					axes.set_xlabel('Domain Type',size=12)
 					#https://stackoverflow.com/questions/36874697/how-to-edit-properties-of-whiskers-fliers-caps-etc-in-seaborn-boxplot
 					for t,artist in enumerate(axes.artists):
-						artist.set_edgecolor('#000000')
+						artist.set_edgecolor(boxcolor)
 						for s in range(t*numboxes,t*numboxes+numlines):
 							line = axes.lines[s]
-							line.set_color('#000000')
-							line.set_mfc('#000000')
-							line.set_mec('#000000')
+							line.set_color(boxcolor)
+							line.set_mfc(boxcolor)
+							line.set_mec(boxcolor)
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
-					for item in ([axes.xaxis.label] + axes.get_xticklabels()):
+					for item in (axes.get_xticklabels()):
 						item.set_fontsize(8)
-					plt.setp(axes.xaxis.get_majorticklabels(),rotation=15)
+					plt.setp(axes.xaxis.get_majorticklabels())#,rotation=15
+					#https://stackoverflow.com/questions/36578458/how-does-one-insert-statistical-annotations-stars-or-p-values-into-matplotlib
+					withoutuce = pdgroup[yvalue].loc[pdgroup['region']=='Without UCEs']
+					withuce = pdgroup[yvalue].loc[pdgroup['region']=='With UCEs']
+					ksStat, KsPval = stats.ks_2samp(withoutuce,withuce)
+					if yvalue == 'size':
+						ylabelmax = pdgroup[yvalue].quantile(q=.99)+2
+					else:
+						ylabelmax = pdgroup[yvalue].quantile(q=.97)+2
+					axes.plot([0,0,1,1], [ylabelmax, ylabelmax+2, ylabelmax+2, ylabelmax], lw=.75, c=boxcolor)
+					axes.text((0+1)*.5, ylabelmax+2,'P-value: {:.01e}'.format(KsPval),ha='center',va='bottom',color=boxcolor,size=8,clip_on=False)
 					datasetcounter += 1
 				else:
 					axes.remove()
@@ -153,23 +170,6 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 		plt.savefig(pp, format='pdf')
 	plt.clf()
 	pp.close()
-
-# def KSTest(aOverlapBP):
-#     "Returns the KS test statistic and p value for rejecting the null hypothesis that aOverlapBP follows a normal distribution with mean and sd equal to those of aOverlapBP"
-#     mean = float(sum(aOverlapBP)) / len(aOverlapBP)
-#     if len(aOverlapBP) < 1000:
-#         print 'Warning: number of iterations is < 1000; KS statistic may be unreliable'
-#     sd = getPopSD(aOverlapBP)
-#     rvNormMatched = stats.norm.rvs(loc=mean, scale=sd, size=len(aOverlapBP))
-#     npArOverlapBP = np.array(aOverlapBP)
-#     ksStat, KsPval = stats.ks_2samp(npArOverlapBP, rvNormMatched)
-#     if KsPval <= 0.05:
-#         strKSresult = "No"
-#         print 'KS statistic is significant: attention needed'
-#     else:
-#         strKSresult = "Yes"
-#         print 'KS statistic not significant: random overlaps appear normally distributed'
-#     return ksStat, KsPval, strKSresult
 
 def main():
 	args = get_args()
