@@ -207,7 +207,7 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 					formatpval,stattest = run_appropriate_test(pdgroup,yvalue)
 					ylabelmax = set_pval_label_location(pdgroup,yvalue)
 					axes.plot([0,0,1,1], [ylabelmax, ylabelmax+2, ylabelmax+2, ylabelmax], lw=.75, c=boxcolor)
-					axes.text((0+1)*.5, ylabelmax+2,'{0}: {1}'.format(stattest,formatpval),ha='center',va='bottom',color=boxcolor,size=8,clip_on=False)
+					axes.text((0+1)*.5, ylabelmax+2,'{0}: {1}'.format(stattest,formatpval),ha='center',va='bottom',color=boxcolor,size=6,clip_on=False)
 					datasetcounter += 1
 				else:
 					axes.remove()

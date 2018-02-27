@@ -46,7 +46,7 @@ def get_args():
 	parser.add_argument("file",type=str,help='the primary element file') # UCEs
 	parser.add_argument("-s","--secondaryfeatures",required=True,type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
 	parser.add_argument("-b","--binnumber",type=int,default='10',help='number of bins to chunk the secondary files into, must be even number')
-	parser.add_argument("-r","--random",type=argparse.FileType('rU'),help='a file with the list of random region file names to use as random regions')
+	parser.add_argument("-r","--random",type=argparse.FileType('rU'),required=False,help='a file with the list of random region file names to use as random regions')
 	return parser.parse_args()
 
 # get bt features
@@ -191,8 +191,40 @@ def run_tiled_subplots_per_binned_dataset(pddata,rndata,names,filename):
 				if datasetcounter < len(names):
 					pdgroup = data_chunk[intPlotCounter]
 					rngroup = random_chunk[intPlotCounter]
-					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
 					sns.pointplot(data=rngroup,x='bin',y='sumbin',color='#a6a6a6',scale=1,ax=axes)
+					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
+					axes.set_ylabel('Frequency',size=12)
+					axes.set_xlabel('Bin Distance from Edge',size=12)
+					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
+					axes.set_xticklabels(axes.get_xticklabels(),fontsize=8)
+					plt.setp(axes.xaxis.get_majorticklabels(),rotation=15)
+					datasetcounter += 1
+				else:
+					axes.remove()
+					pass
+		plt.tight_layout()
+		sns.despine()
+		plt.savefig(pp, format='pdf')
+	plt.clf()
+	pp.close()
+
+# tile the point plots
+def run_tiled_subplots_per_binned_dataset_no_random(pddata,names,filename):
+	sns.set_style('ticks')
+	pp = PdfPages(filename)
+	plt.figure(figsize=(10,10))
+	datasetcounter = 0
+	fig,ax_array = plt.subplots(3,2)
+	intnum = len(names)
+	for data_chunk,name_chunk in zip(chunks(pddata,6),chunks(names,6)):
+		intPlotCounter = -1
+		for i,ax_row in enumerate(ax_array):
+			for j,axes in enumerate(ax_row):
+				axes.cla()
+				intPlotCounter += 1
+				if datasetcounter < len(names):
+					pdgroup = data_chunk[intPlotCounter]
+					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
 					axes.set_ylabel('Frequency',size=12)
 					axes.set_xlabel('Bin Distance from Edge',size=12)
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
@@ -210,30 +242,27 @@ def run_tiled_subplots_per_binned_dataset(pddata,rndata,names,filename):
 
 def main():
 	args = get_args()
-	
-	# read in files from args
-	bins = args.binnumber
-	pfile = args.file
-	secondaryfiles = [line.strip() for line in args.secondaryfeatures]
-	randomfiles = [line.strip() for line in args.random]
-	
+	bins = args.binnumber # get the number of bins to use
+	pfile = args.file # get the primary file
+	secondaryfiles = [line.strip() for line in args.secondaryfeatures] # get a list of secondary files
 	lumpsecondary = iterate_through_secondary_files(pfile,secondaryfiles,bins) # run the analysis agains each secondary file
 	concatsecondary = pd.concat(lumpsecondary) # concat the lumped regions
 	lumpsecondary.append(concatsecondary) # add the concated all domains to the list to graph
-	
-	lumprandom = [] # initiate list for all random regions
-	for random in randomfiles: # iterate through the random region files
-		lump = iterate_through_secondary_files(random,secondaryfiles,bins)
-		concatlump = pd.concat(lump) # concat the lumped regions
-		lump.append(concatlump) # add the concated all domains to the list to graph
-		lumprandom.append(lump) # add each random file to list of all random regions
-	formatrandom = format_random_data_structure(lumprandom) # format the random regions to easily plot
-	
-	# add a descriptor to the concated domain dataset
-	secondaryfiles.append('All Domains')
-	
-	# run tile plot for primaries binned
-	run_tiled_subplots_per_binned_dataset(lumpsecondary,formatrandom,secondaryfiles,'tiled_binned_UCEs.pdf')
+	if args.random:
+		randomfiles = [line.strip() for line in args.random]
+		lumprandom = [] # initiate list for all random regions
+		for random in randomfiles: # iterate through the random region files
+			lump = iterate_through_secondary_files(random,secondaryfiles,bins)
+			concatlump = pd.concat(lump) # concat the lumped regions
+			lump.append(concatlump) # add the concated all domains to the list to graph
+			lumprandom.append(lump) # add each random file to list of all random regions
+		formatrandom = format_random_data_structure(lumprandom) # format the random regions to easily plot
+		# run tile plot for primaries binned
+		secondaryfiles.append('All Domains') # add a descriptor to the concated domain dataset
+		run_tiled_subplots_per_binned_dataset(lumpsecondary,formatrandom,secondaryfiles,'tiled_binned_UCEs.pdf')
+	else:
+		secondaryfiles.append('All Domains') # add a descriptor to the concated domain dataset
+		run_tiled_subplots_per_binned_dataset_no_random(lumpsecondary,secondaryfiles,'tiled_binned_UCEs.pdf')
 
 if __name__ == "__main__":
 	main()
