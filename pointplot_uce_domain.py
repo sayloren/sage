@@ -18,9 +18,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Question: only plot genes that are in regions that also have uces?
-Question: plot the mouse uces against the total set?
-
 In:
 primary - uce file
 secondary - file with list of domain filenames
@@ -49,6 +46,7 @@ def get_args():
 	parser.add_argument("file",type=str,help='the primary element file') # UCEs
 	parser.add_argument("-s","--secondaryfeatures",required=True,type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
 	parser.add_argument("-b","--binnumber",type=int,default='10',help='number of bins to chunk the secondary files into, must be even number')
+	parser.add_argument("-r","--random",type=argparse.FileType('rU'),help='a file with the list of random region file names to use as random regions')
 	return parser.parse_args()
 
 # get bt features
@@ -140,15 +138,51 @@ def chunks(l, n):
 	for i in range(0, len(l), n):
 		yield l[i:i + n]
 
+# iterate through the secondary files
+def iterate_through_secondary_files(pfile,secondaryfiles,bins):
+	lumpsecondary = [] # initiate collection
+	for sfile in secondaryfiles: # process feature files
+		secondary = get_bedtools_features(sfile) # get secondary features
+		pdsecondary = count_overlap_df(secondary,pfile,'{0}'.format(pfile)) # make the pandas data sets for the count overlaps
+		labelsecondary = pdsecondary[['chr','start','end','id']] # get just the coordinates and the id
+		btsecondary = convert_panda_to_bed_format(labelsecondary) # convert back to a bedtools to run the windows
+		windows = make_window_with_secondary_files(btsecondary,bins) # run the domains through bedtools window to get the right # bins for each section
+		intersectprimary = intersect_bedfiles_c_true(windows,pfile) # get the count of the number of uces in each window
+		pdintersect = convert_bedtools_to_panda(intersectprimary) # convert to back to panda and label
+		pdlabel = label_coordinate_columns(pdintersect)
+		pdlabel.columns.values[3]='id'
+		pdlabel.columns.values[4]='count_primary'
+		pdlabel.rename(columns={'chr':'window_chr','start':'window_start','end':'window_end','size':'overlapsize'},inplace=True)
+		intersectsecondary = intersect_pandas_with_id(pdlabel,labelsecondary) # intersect back into domains
+		intersectsecondary.rename(columns={'chr':'region_chr','start':'region_start','end':'region_end'},inplace=True)
+		intersectsecondary['region_size'] = intersectsecondary['region_end'].astype(int)-intersectsecondary['region_start'].astype(int)
+		groupsecondary = group_df_by_secondary_regions(intersectsecondary) # group by the larger genomic regions; the whole domain
+		dropzero = drop_primary_zero_list(groupsecondary,'bincounts_count_primary') # remove secondary features where there are no primary elements
+		formatbin = format_binned_data_sum_for_graphing(dropzero,bins) # shape the data frame
+		foldbin = fold_formated_binned_data_sum(formatbin,bins) # fold the data frame by combining edges for the pointplot
+		lumpsecondary.append(foldbin) # add the data set to the lump sum to get the total for the end of the script
+	return lumpsecondary
+
+# format the random regions for plotting
+def format_random_data_structure(random):
+	format = []
+	first = random[0]
+	for i in range(len(first)):
+		#https://stackoverflow.com/questions/25050311/extract-first-item-of-each-sublist-in-python/25050328
+		item = [j[i] for j in random]
+		concat = pd.concat(item)
+		format.append(concat)
+	return format
+
 # tile the point plots
-def run_tiled_subplots_per_binned_dataset(pddata,names,filename):
+def run_tiled_subplots_per_binned_dataset(pddata,rndata,names,filename):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
 	plt.figure(figsize=(10,10))
 	datasetcounter = 0
 	fig,ax_array = plt.subplots(3,2)
 	intnum = len(names)
-	for data_chunk,name_chunk in zip(chunks(pddata,6),chunks(names,6)):
+	for data_chunk,random_chunk,name_chunk in zip(chunks(pddata,6),chunks(rndata,6),chunks(names,6)):
 		intPlotCounter = -1
 		for i,ax_row in enumerate(ax_array):
 			for j,axes in enumerate(ax_row):
@@ -156,12 +190,13 @@ def run_tiled_subplots_per_binned_dataset(pddata,names,filename):
 				intPlotCounter += 1
 				if datasetcounter < len(names):
 					pdgroup = data_chunk[intPlotCounter]
+					rngroup = random_chunk[intPlotCounter]
 					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
+					sns.pointplot(data=rngroup,x='bin',y='sumbin',color='#a6a6a6',scale=1,ax=axes)
 					axes.set_ylabel('Frequency',size=12)
-					axes.set_xlabel('Bin Distance from Edge')
+					axes.set_xlabel('Bin Distance from Edge',size=12)
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
-					for item in ([axes.xaxis.label] + axes.get_xticklabels()):
-						item.set_fontsize(8)
+					axes.set_xticklabels(axes.get_xticklabels(),fontsize=8)
 					plt.setp(axes.xaxis.get_majorticklabels(),rotation=15)
 					datasetcounter += 1
 				else:
@@ -180,75 +215,25 @@ def main():
 	bins = args.binnumber
 	pfile = args.file
 	secondaryfiles = [line.strip() for line in args.secondaryfeatures]
+	randomfiles = [line.strip() for line in args.random]
 	
-	# initiate collection
-	lumpsecondary = []
+	lumpsecondary = iterate_through_secondary_files(pfile,secondaryfiles,bins) # run the analysis agains each secondary file
+	concatsecondary = pd.concat(lumpsecondary) # concat the lumped regions
+	lumpsecondary.append(concatsecondary) # add the concated all domains to the list to graph
 	
-	# process feature files
-	for sfile in secondaryfiles:
-		
-		# get secondary features
-		secondary = get_bedtools_features(sfile)
-		
-		# make the pandas data sets for the count overlaps
-		pdsecondary = count_overlap_df(secondary,pfile,'{0}'.format(pfile))
-		
-		# get just the coordinates and the id
-		labelsecondary = pdsecondary[['chr','start','end','id']]
-		
-		# convert back to a bedtools to run the windows
-		btsecondary = convert_panda_to_bed_format(labelsecondary)
-		
-		# run the domains through bedtools window to get the right # bins for each section
-		windows = make_window_with_secondary_files(btsecondary,bins)
-		
-		# get the count of the number of uces in each window
-		intersectprimary = intersect_bedfiles_c_true(windows,pfile)
-		
-		# convert to back to panda and label
-		pdintersect = convert_bedtools_to_panda(intersectprimary)
-		pdlabel = label_coordinate_columns(pdintersect)
-		pdlabel.columns.values[3]='id'
-		pdlabel.columns.values[4]='count_primary'
-		pdlabel.rename(columns={'chr':'window_chr','start':'window_start','end':'window_end','size':'overlapsize'},inplace=True)
-		
-		# intersect back into domains
-		intersectsecondary = intersect_pandas_with_id(pdlabel,labelsecondary)
-		intersectsecondary.rename(columns={'chr':'region_chr','start':'region_start','end':'region_end'},inplace=True)
-		intersectsecondary['region_size'] = intersectsecondary['region_end'].astype(int)-intersectsecondary['region_start'].astype(int)
-		
-		# group by the larger genomic regions; the whole domain
-		groupsecondary = group_df_by_secondary_regions(intersectsecondary)
-		
-		# remove secondary features where there are no primary elements
-		dropzero = drop_primary_zero_list(groupsecondary,'bincounts_count_primary')
-		
-		# shape the data frame
-		formatbin = format_binned_data_sum_for_graphing(dropzero,bins)
-		
-		# fold the data frame by combining edges for the pointplot
-		foldbin = fold_formated_binned_data_sum(formatbin,bins)
-		
-		# add the data set to the lump sum to get the total for the end of the script
-		lumpsecondary.append(foldbin)
-		
-	# concat the lumped regions
-	concatsecondary = pd.concat(lumpsecondary)
-	
-	# add the concated all domains to the list to graph
-	lumpsecondary.append(concatsecondary)
+	lumprandom = [] # initiate list for all random regions
+	for random in randomfiles: # iterate through the random region files
+		lump = iterate_through_secondary_files(random,secondaryfiles,bins)
+		concatlump = pd.concat(lump) # concat the lumped regions
+		lump.append(concatlump) # add the concated all domains to the list to graph
+		lumprandom.append(lump) # add each random file to list of all random regions
+	formatrandom = format_random_data_structure(lumprandom) # format the random regions to easily plot
 	
 	# add a descriptor to the concated domain dataset
 	secondaryfiles.append('All Domains')
 	
 	# run tile plot for primaries binned
-	run_tiled_subplots_per_binned_dataset(lumpsecondary,secondaryfiles,'tiled_binned_UCEs.pdf')
-
-
-
-
-
-
+	run_tiled_subplots_per_binned_dataset(lumpsecondary,formatrandom,secondaryfiles,'tiled_binned_UCEs.pdf')
 
 if __name__ == "__main__":
 	main()
