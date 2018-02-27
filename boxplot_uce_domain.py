@@ -127,21 +127,55 @@ def getPopSD(arObservedOverlaps):
 
 # ks test from ruth's random region script
 def KSTest(aOverlapBP):
-	"Returns the KS test statistic and p value for rejecting the null hypothesis that aOverlapBP follows a normal distribution with mean and sd equal to those of aOverlapBP"
+# 	"Returns the KS test statistic and p value for rejecting the null hypothesis that aOverlapBP follows a normal distribution with mean and sd equal to those of aOverlapBP"
 	mean = float(sum(aOverlapBP)) / len(aOverlapBP)
-	if len(aOverlapBP) < 1000:
-		print 'Warning: number of iterations is < 1000; KS statistic may be unreliable'
+# 	if len(aOverlapBP) < 1000:
+# 		print 'Warning: number of iterations is < 1000; KS statistic may be unreliable'
 	sd = getPopSD(aOverlapBP)
 	rvNormMatched = stats.norm.rvs(loc=mean, scale=sd, size=len(aOverlapBP))
 	npArOverlapBP = np.array(aOverlapBP)
 	ksStat, KsPval = stats.ks_2samp(npArOverlapBP, rvNormMatched)
 	if KsPval <= 0.05:
 		strKSresult = "No"
-		print 'KS statistic is significant: attention needed'
+# 		print 'KS statistic is significant: attention needed'
 	else:
 		strKSresult = "Yes"
-		print 'KS statistic not significant: random overlaps appear normally distributed'
+# 		print 'KS statistic not significant: random overlaps appear normally distributed'
 	return ksStat, KsPval, strKSresult
+
+# run ks test for normal distribution and choose appropriate stats test
+def run_appropriate_test(pdgroup,yvalue):
+	withuces = pdgroup[yvalue].loc[pdgroup['region']=='With UCEs']
+	withoutuces = pdgroup[yvalue].loc[pdgroup['region']=='Without UCEs']
+	ksStat,KsPval,strKSresult = KSTest(withuces)
+	if strKSresult == 'Yes':
+		statcoef, statpval = stats.ttest_ind(withuces,withoutuces)# or ttest_rel()
+		stattest = 'TT'
+		formatpval = '{:.01e}'.format(statpval)
+	else:
+		statcoef, statpval = stats.mannwhitneyu(withuces,withoutuces)
+		stattest = 'MW'
+		formatpval = '{:.01e}'.format(statpval)
+	return formatpval,stattest
+
+# get the location where to add the p value annotation
+def set_pval_label_location(pdgroup,yvalue):
+	if yvalue == 'size':
+		ylabelmax = pdgroup[yvalue].quantile(q=.99)+2
+	else:
+		ylabelmax = pdgroup[yvalue].quantile(q=.97)+2
+	return ylabelmax
+
+# darken the lines around the boxplot to black
+def darkend_boxplot_lines(axes,numboxes,numlines,boxcolor):
+	#https://stackoverflow.com/questions/36874697/how-to-edit-properties-of-whiskers-fliers-caps-etc-in-seaborn-boxplot
+	for t,artist in enumerate(axes.artists):
+		artist.set_edgecolor(boxcolor)
+		for s in range(t*numboxes,t*numboxes+numlines):
+			line = axes.lines[s]
+			line.set_color(boxcolor)
+			line.set_mfc(boxcolor)
+			line.set_mec(boxcolor)
 
 # tile the boxplots
 def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filename,pfile,qfile):
@@ -166,36 +200,14 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 					sns.boxplot(data=pdgroup,x='region',y=yvalue,showfliers=False,ax=axes,linewidth=.75)
 					axes.set_ylabel(ylabeltext,size=12)
 					axes.set_xlabel('Domain Type',size=12)
-					#https://stackoverflow.com/questions/36874697/how-to-edit-properties-of-whiskers-fliers-caps-etc-in-seaborn-boxplot
-					for t,artist in enumerate(axes.artists):
-						artist.set_edgecolor(boxcolor)
-						for s in range(t*numboxes,t*numboxes+numlines):
-							line = axes.lines[s]
-							line.set_color(boxcolor)
-							line.set_mfc(boxcolor)
-							line.set_mec(boxcolor)
+					darkend_boxplot_lines(axes,numboxes,numlines,boxcolor)
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
-					for item in (axes.get_xticklabels()):
-						item.set_fontsize(8)
-					plt.setp(axes.xaxis.get_majorticklabels())#,rotation=15
-					withuces = pdgroup[yvalue].loc[pdgroup['region']=='With UCEs']
-					withoutuces = pdgroup[yvalue].loc[pdgroup['region']=='Without UCEs']
-					ksStat,KsPval,strKSresult = KSTest(withuces)
-					if strKSresult == 'Yes':
-						statcoef, statpval = stats.ttest_ind(withuces,withoutuces)# or ttest_rel()
-						stattest = 'TT'
-						formatpval = '{:.01e}'.format(statpval)
-					else:
-						statcoef, statpval = stats.mannwhitneyu(withuces,withoutuces)
-						stattest = 'MW'
-						formatpval = '{:.01e}'.format(statpval)
-					if yvalue == 'size':
-						ylabelmax = pdgroup[yvalue].quantile(q=.99)+2
-					else:
-						ylabelmax = pdgroup[yvalue].quantile(q=.97)+2
+					axes.set_xticklabels(axes.get_xticklabels(),fontsize=8)
+					plt.setp(axes.xaxis.get_majorticklabels())#rotation=15
+					formatpval,stattest = run_appropriate_test(pdgroup,yvalue)
+					ylabelmax = set_pval_label_location(pdgroup,yvalue)
 					axes.plot([0,0,1,1], [ylabelmax, ylabelmax+2, ylabelmax+2, ylabelmax], lw=.75, c=boxcolor)
 					axes.text((0+1)*.5, ylabelmax+2,'{0}: {1}'.format(stattest,formatpval),ha='center',va='bottom',color=boxcolor,size=8,clip_on=False)
-					
 					datasetcounter += 1
 				else:
 					axes.remove()
