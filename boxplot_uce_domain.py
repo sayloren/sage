@@ -109,7 +109,7 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
 	plt.figure(figsize=(10,10))
-	plt.rcParams['axes.formatter.limits'] = (-3, 3)
+# 	plt.rcParams['axes.formatter.limits'] = (-3, 3)
 	sns.set_palette("Blues")
 	datasetcounter = 0
 	fig,ax_array = plt.subplots(3,2)
@@ -126,10 +126,13 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 				intPlotCounter += 1
 				if datasetcounter < len(names):
 					pdgroup = format_with_without_data_for_boxplot(data_chunk[intPlotCounter],yvalue,pfile,qfile)
+					#https://stackoverflow.com/questions/8362792/how-do-i-shift-the-decimal-place-in-python
+					if yvalue == 'size':
+						pdgroup['size'] /= 1000.
 					sns.boxplot(data=pdgroup,x='region',y=yvalue,showfliers=False,ax=axes,linewidth=.75)
 					axes.set_ylabel(ylabeltext,size=12)
 					axes.set_xlabel('')
-# 					#https://stackoverflow.com/questions/36874697/how-to-edit-properties-of-whiskers-fliers-caps-etc-in-seaborn-boxplot
+					#https://stackoverflow.com/questions/36874697/how-to-edit-properties-of-whiskers-fliers-caps-etc-in-seaborn-boxplot
 					for t,artist in enumerate(axes.artists):
 						artist.set_edgecolor('#000000')
 						for s in range(t*numboxes,t*numboxes+numlines):
@@ -219,7 +222,7 @@ def main():
 	secondaryfiles.append('All Domains')
 	
 	# run the tile plot secondary sizes
-	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (bp)',secondaryfiles,'tiled_domain_sizes.pdf',pfile,qfile)
+	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (kp)',secondaryfiles,'tiled_domain_sizes.pdf',pfile,qfile)
 	
 	# run tile plot for tertiary counts
 	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number.pdf',pfile,qfile)
