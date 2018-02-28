@@ -27,6 +27,9 @@ quinary - mouse uces in original uce coordinates (optional - if included will ad
 Out:
 pdf file with each of the domains in a seperate subplot, and all as the final most subplot
 
+To Do:
+make the gene boxplots not explicit, but an argument to supply
+
 """
 
 import argparse
@@ -80,6 +83,18 @@ def count_overlap_df(secondary,file,label):
 	pdcoordinates.columns.values[3]='intersect_{0}'.format(label)
 	return pdcoordinates
 
+# run primary, tertiary, quinary overlaps
+def run_overlaps_for_ptq_against_s(secondary,pfile,tfile,qfile):
+	pdprimary = count_overlap_df(secondary,pfile,'{0}'.format(pfile)) # make the pandas data sets for the count overlaps
+	concat = pdprimary # rename to preserve
+	if tfile: # if optional arguments, add to panda
+		pdtertiary = count_overlap_df(secondary,tfile,'tertiary')
+		concat = concat.merge(pdtertiary,how='inner',on=['chr','start','end','size'])
+	if qfile: # if optional arguments, add to panda
+		pdquinary = count_overlap_df(secondary,qfile,'{0}'.format(qfile))
+		concat = concat.merge(pdquinary,how='inner',on=['chr','start','end','size'])
+	return concat
+
 # move elements without any overlaps
 def remove_rows_with_no_overlaps(overlaps,column):
 	return overlaps[overlaps[column]!=0]
@@ -117,6 +132,12 @@ def set_num_lines_to_color(qfile):
 		numboxes,numlines = 2,8
 	return numboxes,numlines
 
+# convert panda to bedtool
+def panda_to_bedtool(panda):
+	arArFeatures = panda.values.tolist()
+	btFeatures = get_bedtools_features(arArFeatures)
+	return btFeatures
+
 # get standard deviation, from ruth's random region script
 def getPopSD(arObservedOverlaps):
 	floatLen = float(len(arObservedOverlaps))
@@ -127,20 +148,15 @@ def getPopSD(arObservedOverlaps):
 
 # ks test from ruth's random region script
 def KSTest(aOverlapBP):
-# 	"Returns the KS test statistic and p value for rejecting the null hypothesis that aOverlapBP follows a normal distribution with mean and sd equal to those of aOverlapBP"
 	mean = float(sum(aOverlapBP)) / len(aOverlapBP)
-# 	if len(aOverlapBP) < 1000:
-# 		print 'Warning: number of iterations is < 1000; KS statistic may be unreliable'
 	sd = getPopSD(aOverlapBP)
 	rvNormMatched = stats.norm.rvs(loc=mean, scale=sd, size=len(aOverlapBP))
 	npArOverlapBP = np.array(aOverlapBP)
 	ksStat, KsPval = stats.ks_2samp(npArOverlapBP, rvNormMatched)
 	if KsPval <= 0.05:
 		strKSresult = "No"
-# 		print 'KS statistic is significant: attention needed'
 	else:
 		strKSresult = "Yes"
-# 		print 'KS statistic not significant: random overlaps appear normally distributed'
 	return ksStat, KsPval, strKSresult
 
 # run ks test for normal distribution and choose appropriate stats test
@@ -148,22 +164,28 @@ def run_appropriate_test(pdgroup,yvalue):
 	withuces = pdgroup[yvalue].loc[pdgroup['region']=='With UCEs']
 	withoutuces = pdgroup[yvalue].loc[pdgroup['region']=='Without UCEs']
 	ksStat,KsPval,strKSresult = KSTest(withuces)
-	if strKSresult == 'Yes':
-		statcoef, statpval = stats.ttest_ind(withuces,withoutuces)# or ttest_rel()
-		stattest = 'TT'
-		formatpval = '{:.01e}'.format(statpval)
-	else:
-		statcoef, statpval = stats.mannwhitneyu(withuces,withoutuces)
-		stattest = 'MW'
-		formatpval = '{:.01e}'.format(statpval)
+# 	if strKSresult == 'Yes':
+# 		statcoef,statpval = stats.ttest_ind(withuces,withoutuces)# or ttest_rel()
+# 		stattest = 'TT'
+# 		formatpval = '{:.01e}'.format(statpval)
+# 	else:
+# 		statcoef,statpval = stats.mannwhitneyu(withuces,withoutuces)
+# 		stattest = 'MW'
+# 		formatpval = '{:.01e}'.format(statpval)
+	statcoef,statpval = stats.mannwhitneyu(withuces,withoutuces)
+	stattest = 'Mann Whiteny U p-value'
+	formatpval = '{:.01e}'.format(statpval)
 	return formatpval,stattest
 
 # get the location where to add the p value annotation
 def set_pval_label_location(pdgroup,yvalue):
-	if yvalue == 'size':
-		ylabelmax = pdgroup[yvalue].quantile(q=.99)+2
-	else:
-		ylabelmax = pdgroup[yvalue].quantile(q=.97)+2
+# 	if yvalue == 'size':
+# 		ylabelmax = pdgroup[yvalue].quantile(q=.99)+2
+# 	else:
+# 		ylabelmax = pdgroup[yvalue].quantile(q=.97)+2
+	justelemenst = pdgroup.loc[pdgroup['region']=='With UCEs']
+	excludeoutliers = justelemenst[np.abs(justelemenst[yvalue]-justelemenst[yvalue].mean())<=(3*justelemenst[yvalue].std())]
+	ylabelmax = excludeoutliers[yvalue].max() + 2
 	return ylabelmax
 
 # darken the lines around the boxplot to black
@@ -233,8 +255,9 @@ def main():
 	else:
 		qfile = None
 
-	# initiate collection
+	# initiate collections
 	lumpsecondary = []
+	lumpsecondarycoords = []
 	
 	# process feature files
 	for sfile in secondaryfiles:
@@ -242,28 +265,34 @@ def main():
 		# get secondary features
 		secondary = get_bedtools_features(sfile)
 		
-		# make the pandas data sets for the count overlaps
-		pdprimary = count_overlap_df(secondary,pfile,'{0}'.format(pfile))
+		# run count overlaps for primary, tertiary, quinary against the secondary regions
+		concat = run_overlaps_for_ptq_against_s(secondary,pfile,tfile,qfile)
 		
-		# rename to preserve
-		concat = pdprimary
+		# just the secondary coords
+		coords = concat[['chr','start','end']]
 		
-		# if optional arguments, add to panda
-		if tfile:
-			pdtertiary = count_overlap_df(secondary,tfile,'tertiary')
-			concat = concat.merge(pdtertiary,how='inner',on=['chr','start','end','size'])
-		if qfile:
-			pdquinary = count_overlap_df(secondary,qfile,'{0}'.format(qfile))
-			concat = concat.merge(pdquinary,how='inner',on=['chr','start','end','size'])
+		# add the coords to the lump later run a set for all the domains
+		lumpsecondarycoords.append(coords)
 		
 		# add the data set to the lump sum to get the total for the end of the script
 		lumpsecondary.append(concat)
 	
-	# concat the lumped regions
+	# concat lumped regions
 	concatsecondary = pd.concat(lumpsecondary)
+	concatsecondarycoords = pd.concat(lumpsecondarycoords)
+	
+	# convert lump secondary coordinates panda to bedtool
+	btconcatsecondary = panda_to_bedtool(concatsecondarycoords)
+	
+	# run overlap with primary/tertiary/quinary again
+	pdoverlapssecondary = run_overlaps_for_ptq_against_s(btconcatsecondary,pfile,tfile,qfile)
+	
+	# randomly select a subset of the total set based on how many sets of secondary regions input
+	fracrandom = len(secondaryfiles)/100.0
+	pdrandomsecondary = pdoverlapssecondary.sample(frac=fracrandom)
 	
 	# add the concated all domains to the list to graph
-	lumpsecondary.append(concatsecondary)
+	lumpsecondary.append(pdrandomsecondary)
 	
 	# add a descriptor to the concated domain dataset
 	secondaryfiles.append('All Domains')
@@ -271,8 +300,9 @@ def main():
 	# run the tile plot secondary sizes
 	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (kp)',secondaryfiles,'tiled_domain_sizes.pdf',pfile,qfile)
 	
-	# run tile plot for tertiary counts
-	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number.pdf',pfile,qfile)
+	if tfile:
+		# run tile plot for tertiary counts
+		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number.pdf',pfile,qfile)
 
 if __name__ == "__main__":
 	main()
