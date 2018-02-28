@@ -22,7 +22,6 @@ In:
 primary - uce file
 secondary - file with list of domain filenames
 tertiary - genes
-quinary - mouse uces in original uce coordinates
 
 Out:
 stats file with the intersects; uce x domain, gene x domain, mouse uce x domain, domain size
@@ -41,7 +40,6 @@ def get_args():
 	parser.add_argument("file",type=str,help='the primary element file') # UCEs
 	parser.add_argument("-s","--secondaryfeatures",required=True,type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
 	parser.add_argument("-t","--tertiaryfeature",type=str,help="the tertiary elements file")# Genes
-	parser.add_argument("-q","--quinaryfeature",type=str,help="the quinary elements file - a subset of the primary features")# Mouse UCEs
 	return parser.parse_args()
 
 # get bt features
@@ -113,12 +111,10 @@ def main():
 	pfile = args.file
 	secondaryfiles = [line.strip() for line in args.secondaryfeatures]
 	tfile = args.tertiaryfeature
-	qfile = args.quinaryfeature
 	
 	# print the number of features in single feature files
 	labelprimary = run_print_number_file_features(pfile)
 	labeltertiary = run_print_number_file_features(tfile)
-	labelquinary = run_print_number_file_features(qfile)
 
 	# initiate collection
 	lumpsecondary = []
@@ -135,15 +131,13 @@ def main():
 		# make the pandas data sets for the count overlaps
 		pdprimary = count_overlap_df(secondary,pfile,'{0}'.format(pfile))
 		pdtertiary = count_overlap_df(secondary,tfile,'{0}'.format(tfile))
-		pdquinary = count_overlap_df(secondary,qfile,'{0}'.format(qfile))
 		
 		# print the number of domains that do not have any uces
 		nooverlaps = count_number_with_zero_overlaps(pdprimary,'intersect_{0}'.format(pfile))
 		print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
 		
 		# concat the three data sets together
-		concattemp = pdprimary.merge(pdtertiary,how='inner',on=['chr','start','end','size'])
-		concattotal = concattemp.merge(pdquinary,how='inner',on=['chr','start','end','size'])
+		concattotal = pdprimary.merge(pdtertiary,how='inner',on=['chr','start','end','size'])
 		
 		# remove the regions with no uces
 		cleantotal = remove_rows_with_no_overlaps(concattotal,'intersect_{0}'.format(pfile))
@@ -163,17 +157,16 @@ def main():
 	# get the stats for the individual files
 	primarystats = panda_describe_single_column(labelprimary,'size')
 	tertiarystats = panda_describe_single_column(labeltertiary,'size')
-	quinarystats = panda_describe_single_column(labelquinary,'size')
 	
 	# concat and get stats for all the secondary files
 	secondaryconcat = pd.concat(lumpsecondary)
 	secondarystats = panda_describe_single_column(secondaryconcat,'size')
 	
 	# concat all the stats into panda
-	allstats = pd.concat([primarystats,secondarystats,tertiarystats,quinarystats],axis=1)
+	allstats = pd.concat([primarystats,secondarystats,tertiarystats],axis=1)
 	
 	# correct column names with file names for clarity
-	allstats.columns = ['size_{0}'.format(pfile),'size_all_domains','size_{0}'.format(tfile),'size_{0}'.format(qfile)]
+	allstats.columns = ['size_{0}'.format(pfile),'size_all_domains','size_{0}'.format(tfile)]
 	
 	# save the panda to file
 	save_panda(allstats,'stats_{0}_all_domains.txt'.format(pfile))
