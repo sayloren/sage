@@ -288,7 +288,7 @@ def main():
 	pdoverlapssecondary = run_overlaps_for_ptq_against_s(btconcatsecondary,pfile,tfile,qfile)
 	
 	# randomly select a subset of the total set based on how many sets of secondary regions input
-	fracrandom = len(secondaryfiles)/100.0
+	fracrandom = 1.0/len(secondaryfiles)
 	pdrandomsecondary = pdoverlapssecondary.sample(frac=fracrandom)
 	
 	# add the concated all domains to the list to graph
