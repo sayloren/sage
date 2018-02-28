@@ -193,8 +193,8 @@ def run_tiled_subplots_per_binned_dataset(pddata,rndata,names,filename,bins):
 				if datasetcounter < len(names):
 					pdgroup = data_chunk[intPlotCounter]
 					rngroup = random_chunk[intPlotCounter]
-					sns.pointplot(data=rngroup,x='bin',y='sumbin',color='#a6a6a6',scale=1,ax=axes)
-					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
+					sns.pointplot(data=rngroup,x='bin',y='sumbin',color='grey',scale=.75,ax=axes,capsize=.2,errwidth=.5,linewidth=.75,ci='sd')#'#a6a6a6'
+					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='blue',scale=.75,ax=axes,capsize=.2,errwidth=.5,linewidth=.75,ci='sd')#'#9ecae1'
 					if name_chunk[intPlotCounter] == 'All Domains':
 						ksStat,KsPval = stats.ks_2samp(rngroup['sumbin'],pdgroup['sumbin'])
 						formatpval = '{:.01e}'.format(KsPval)
@@ -232,7 +232,7 @@ def run_tiled_subplots_per_binned_dataset_no_random(pddata,names,filename):
 				intPlotCounter += 1
 				if datasetcounter < len(names):
 					pdgroup = data_chunk[intPlotCounter]
-					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
+					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='blue',scale=.75,ax=axes,capsize=.2,errwidth=.5,linewidth=.75,ci='sd')#'#9ecae1'
 					axes.set_ylabel('Frequency',size=12)
 					axes.set_xlabel('Bin Distance from Edge',size=12)
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
