@@ -24,8 +24,8 @@ secondary - file with list of domain filenames
 tertiary - genes
 
 Out:
-stats file with the intersects; uce x domain, gene x domain, mouse uce x domain, domain size
-stats file for all the domains; uce size, all domain size, gene size, mouse uce size
+stats file with the intersects; uce x domain, gene x domain, domain size
+stats file for all the domains; uce size, all domain size, gene size
 
 """
 import argparse
@@ -162,11 +162,15 @@ def main():
 	secondaryconcat = pd.concat(lumpsecondary)
 	secondarystats = panda_describe_single_column(secondaryconcat,'size')
 	
+	# get the total count stats for all the secondary files
+	primarycountstats = panda_describe_single_column(secondaryconcat,'intersect_{0}'.format(pfile))
+	tertiarycountstats = panda_describe_single_column(secondaryconcat,'intersect_{0}'.format(tfile))
+	
 	# concat all the stats into panda
-	allstats = pd.concat([primarystats,secondarystats,tertiarystats],axis=1)
+	allstats = pd.concat([primarystats,secondarystats,tertiarystats,primarycountstats,tertiarycountstats],axis=1)
 	
 	# correct column names with file names for clarity
-	allstats.columns = ['size_{0}'.format(pfile),'size_all_domains','size_{0}'.format(tfile)]
+	allstats.columns = ['size_{0}'.format(pfile),'size_all_domains','size_{0}'.format(tfile),'counts_in_UCE_domains_{0}'.format(pfile),'counts_in_UCE_domains_{0}'.format(tfile)]
 	
 	# save the panda to file
 	save_panda(allstats,'stats_{0}_all_domains.txt'.format(pfile))
