@@ -195,11 +195,12 @@ def run_tiled_subplots_per_binned_dataset(pddata,rndata,names,filename,bins):
 					rngroup = random_chunk[intPlotCounter]
 					sns.pointplot(data=rngroup,x='bin',y='sumbin',color='#a6a6a6',scale=1,ax=axes)
 					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='#9ecae1',scale=1,ax=axes)
-					ksStat,KsPval = stats.ks_2samp(rngroup['sumbin'],pdgroup['sumbin'])
-					formatpval = '{:.01e}'.format(KsPval)
-					ylabelcat = pd.concat([rngroup,pdgroup])
-					ylabelmax = ylabelcat['sumbin'].loc[ylabelcat['bin']==median(range(bins/2))].max()
-					axes.text(bins/4, ylabelmax+5,'KS: {0}'.format(formatpval),ha='center',va='bottom',color='#000000',size=6,clip_on=False)
+					if name_chunk[intPlotCounter] == 'All Domains':
+						ksStat,KsPval = stats.ks_2samp(rngroup['sumbin'],pdgroup['sumbin'])
+						formatpval = '{:.01e}'.format(KsPval)
+						ylabelcat = pd.concat([rngroup,pdgroup])
+						ylabelmax = ylabelcat['sumbin'].loc[ylabelcat['bin']==median(range(bins/2))].quantile(q=.75)
+						axes.text(bins/4, ylabelmax+5,'KS: {0}'.format(formatpval),ha='center',va='bottom',color='#000000',size=6,clip_on=False)
 					axes.set_ylabel('Frequency',size=12)
 					axes.set_xlabel('Bin Distance from Edge',size=12)
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
