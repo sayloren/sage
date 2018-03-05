@@ -53,6 +53,7 @@ def get_args():
 	parser.add_argument("-s","--secondaryfeatures",required=True,type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
 	parser.add_argument("-t","--tertiaryfeature",required=False,type=str,help="the tertiary features file")# Genes
 	parser.add_argument("-q","--quinaryfeature",required=False,type=str,help="the quinary elements file - a subset of the primary features")# Mouse UCEs
+	parser.add_argument('-n',"--stringname",type=str,help='string to add to the outfile name')
 	return parser.parse_args()
 
 # get bt features
@@ -244,6 +245,7 @@ def main():
 	args = get_args()
 	
 	# read in files from args
+	stringname = args.stringname
 	pfile = args.file
 	secondaryfiles = [line.strip() for line in args.secondaryfeatures]
 	if args.tertiaryfeature:
@@ -298,11 +300,11 @@ def main():
 	secondaryfiles.append('All Domains')
 	
 	# run the tile plot secondary sizes
-	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (kp)',secondaryfiles,'tiled_domain_sizes.pdf',pfile,qfile)
+	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (kp)',secondaryfiles,'tiled_domain_sizes_{0}.pdf'.format(stringname),pfile,qfile)
 	
 	if tfile:
 		# run tile plot for tertiary counts
-		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number.pdf',pfile,qfile)
+		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number_{0}.pdf'.format(stringname),pfile,qfile)
 
 if __name__ == "__main__":
 	main()

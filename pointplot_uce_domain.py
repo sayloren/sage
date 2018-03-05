@@ -49,6 +49,7 @@ def get_args():
 	parser.add_argument("-s","--secondaryfeatures",required=True,type=argparse.FileType('rU'),help="a file with a list of file names with the secondary features to query") # Domains
 	parser.add_argument("-b","--binnumber",type=int,default='10',help='number of bins to chunk the secondary files into, must be even number')
 	parser.add_argument("-r","--random",type=argparse.FileType('rU'),required=False,help='a file with the list of random region file names to use as random regions')
+	parser.add_argument('-n',"--stringname",type=str,help='string to add to the outfile name')
 	return parser.parse_args()
 
 # get bt features
@@ -250,6 +251,7 @@ def run_tiled_subplots_per_binned_dataset_no_random(pddata,names,filename):
 
 def main():
 	args = get_args()
+	stringname = args.stringname
 	bins = args.binnumber # get the number of bins to use
 	pfile = args.file # get the primary file
 	secondaryfiles = [line.strip() for line in args.secondaryfeatures] # get a list of secondary files
@@ -267,10 +269,10 @@ def main():
 		formatrandom = format_random_data_structure(lumprandom) # format the random regions to easily plot
 		# run tile plot for primaries binned
 		secondaryfiles.append('All Domains') # add a descriptor to the concated domain dataset
-		run_tiled_subplots_per_binned_dataset(lumpsecondary,formatrandom,secondaryfiles,'tiled_binned_UCEs.pdf',bins)
+		run_tiled_subplots_per_binned_dataset(lumpsecondary,formatrandom,secondaryfiles,'tiled_binned_UCEs_{0}.pdf'.format(stringname),bins)
 	else:
 		secondaryfiles.append('All Domains') # add a descriptor to the concated domain dataset
-		run_tiled_subplots_per_binned_dataset_no_random(lumpsecondary,secondaryfiles,'tiled_binned_UCEs.pdf')
+		run_tiled_subplots_per_binned_dataset_no_random(lumpsecondary,secondaryfiles,'tiled_binned_UCEs_{0}.pdf'.format(stringname))
 
 if __name__ == "__main__":
 	main()
