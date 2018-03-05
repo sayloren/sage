@@ -91,6 +91,7 @@ def run_overlaps_for_ptq_against_s(secondary,pfile,tfile,qfile):
 	if tfile: # if optional arguments, add to panda
 		pdtertiary = count_overlap_df(secondary,tfile,'tertiary')
 		concat = concat.merge(pdtertiary,how='inner',on=['chr','start','end','size'])
+		concat['density_tertiary'] = concat['intersect_tertiary']/concat['size']
 	if qfile: # if optional arguments, add to panda
 		pdquinary = count_overlap_df(secondary,qfile,'{0}'.format(qfile))
 		concat = concat.merge(pdquinary,how='inner',on=['chr','start','end','size'])
@@ -180,14 +181,13 @@ def run_appropriate_test(pdgroup,yvalue):
 
 # get the location where to add the p value annotation
 def set_pval_label_location(pdgroup,yvalue):
-# 	if yvalue == 'size':
-# 		ylabelmax = pdgroup[yvalue].quantile(q=.99)+2
-# 	else:
-# 		ylabelmax = pdgroup[yvalue].quantile(q=.97)+2
-	justelemenst = pdgroup.loc[pdgroup['region']=='With UCEs']
-	excludeoutliers = justelemenst[np.abs(justelemenst[yvalue]-justelemenst[yvalue].mean())<=(3*justelemenst[yvalue].std())]
-	ylabelmax = excludeoutliers[yvalue].max() + 2
-	return ylabelmax
+	if yvalue == 'size':
+		addvalue = 750
+	elif yvalue == 'intersect_tertiary':
+		addvalue = .0005
+	else:
+		addvalue = .000000005
+	return addvalue
 
 # darken the lines around the boxplot to black
 def darkend_boxplot_lines(axes,numboxes,numlines,boxcolor):
@@ -228,9 +228,10 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 					axes.set_xticklabels(axes.get_xticklabels(),fontsize=8)
 					plt.setp(axes.xaxis.get_majorticklabels())#rotation=15
 					formatpval,stattest = run_appropriate_test(pdgroup,yvalue)
-					ylabelmax = set_pval_label_location(pdgroup,yvalue)
-					axes.plot([0,0,1,1], [ylabelmax, ylabelmax+2, ylabelmax+2, ylabelmax], lw=.75, c=boxcolor)
-					axes.text((0+1)*.5, ylabelmax+2,'{0}: {1}'.format(stattest,formatpval),ha='center',va='bottom',color=boxcolor,size=6,clip_on=False)
+					addvalue = set_pval_label_location(pdgroup,yvalue)
+					ylabelmax = pdgroup[yvalue].quantile(q=.97)
+					axes.plot([0,0,1,1],[ylabelmax+addvalue,ylabelmax+addvalue,ylabelmax+addvalue,ylabelmax+addvalue],lw=.75,c=boxcolor)
+					axes.text((0+1)*.5,ylabelmax+addvalue,'{0}: {1}'.format(stattest,formatpval),ha='center',va='bottom',color=boxcolor,size=6,clip_on=False)
 					datasetcounter += 1
 				else:
 					axes.remove()
@@ -294,10 +295,13 @@ def main():
 	pdrandomsecondary = pdoverlapssecondary.sample(frac=fracrandom)
 	
 	# add the concated all domains to the list to graph
-	lumpsecondary.append(pdrandomsecondary)
+	lumpsecondary.append(pdrandomsecondary) # the subsampled
+	lumpsecondary.append(pdoverlapssecondary) # the non-subsampled
 	
 	# add a descriptor to the concated domain dataset
-	secondaryfiles.append('All Domains')
+	perrandom = fracrandom*100
+	secondaryfiles.append('All Domains, Sub-Sampled 1/{0}'.format(perrandom)) # the subsampled
+	secondaryfiles.append('All Domains, Not Sub-Sampled') # the non-subsampled
 	
 	# run the tile plot secondary sizes
 	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (kp)',secondaryfiles,'tiled_domain_sizes_{0}.pdf'.format(stringname),pfile,qfile)
@@ -305,6 +309,7 @@ def main():
 	if tfile:
 		# run tile plot for tertiary counts
 		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number_{0}.pdf'.format(stringname),pfile,qfile)
+		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'density_tertiary','Density',secondaryfiles,'tiled_gene_density_{0}.pdf'.format(stringname),pfile,qfile)
 
 if __name__ == "__main__":
 	main()
