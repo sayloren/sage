@@ -91,6 +91,7 @@ def run_overlaps_for_ptq_against_s(secondary,pfile,tfile,qfile):
 	if tfile: # if optional arguments, add to panda
 		pdtertiary = count_overlap_df(secondary,tfile,'tertiary')
 		concat = concat.merge(pdtertiary,how='inner',on=['chr','start','end','size'])
+		concat['size'] /= 1000.
 		concat['density_tertiary'] = concat['intersect_tertiary']/concat['size']
 	if qfile: # if optional arguments, add to panda
 		pdquinary = count_overlap_df(secondary,qfile,'{0}'.format(qfile))
@@ -121,9 +122,6 @@ def format_with_without_data_for_boxplot(pdfeatures,column,pfile,qfile):
 		sumquin['region'] = 'With Mouse UCEs'
 		tertiarysum = pd.concat([tertiarysum,sumquin])
 	tertiarysum.drop(columns=['index'],inplace=True)
-	#https://stackoverflow.com/questions/8362792/how-do-i-shift-the-decimal-place-in-python
-	if column == 'size':
-		tertiarysum['size'] /= 1000.
 	return tertiarysum
 
 # set the number of lines to darken on the boxplot
@@ -176,7 +174,7 @@ def run_appropriate_test(pdgroup,yvalue):
 # 		formatpval = '{:.01e}'.format(statpval)
 	statcoef,statpval = stats.mannwhitneyu(withuces,withoutuces)
 	stattest = 'Mann Whiteny U p-value'
-	formatpval = '{:.01e}'.format(statpval)
+	formatpval = '{:.02e}'.format(statpval)
 	return formatpval,stattest
 
 # get the location where to add the p value annotation
@@ -221,8 +219,8 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 				if datasetcounter < len(names):
 					pdgroup = format_with_without_data_for_boxplot(data_chunk[intPlotCounter],yvalue,pfile,qfile)
 					sns.boxplot(data=pdgroup,x='region',y=yvalue,showfliers=False,ax=axes,linewidth=.75)
-					axes.set_ylabel(ylabeltext,size=12)
-					axes.set_xlabel('Domain Type',size=12)
+					axes.set_ylabel(ylabeltext,size=10)
+					axes.set_xlabel('Domain Type',size=10)
 					darkend_boxplot_lines(axes,numboxes,numlines,boxcolor)
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
 					axes.set_xticklabels(axes.get_xticklabels(),fontsize=8)
@@ -304,12 +302,12 @@ def main():
 	secondaryfiles.append('All Domains, Not Sub-Sampled') # the non-subsampled
 	
 	# run the tile plot secondary sizes
-	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (kp)',secondaryfiles,'tiled_domain_sizes_{0}.pdf'.format(stringname),pfile,qfile)
+	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (Kb)',secondaryfiles,'tiled_domain_sizes_{0}.pdf'.format(stringname),pfile,qfile)
 	
 	if tfile:
 		# run tile plot for tertiary counts
 		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number_{0}.pdf'.format(stringname),pfile,qfile)
-		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'density_tertiary','Density',secondaryfiles,'tiled_gene_density_{0}.pdf'.format(stringname),pfile,qfile)
+		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'density_tertiary','Gene Density (Kb)',secondaryfiles,'tiled_gene_density_{0}.pdf'.format(stringname),pfile,qfile)
 
 if __name__ == "__main__":
 	main()
