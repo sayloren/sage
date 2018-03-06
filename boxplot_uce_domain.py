@@ -86,16 +86,16 @@ def count_overlap_df(secondary,file,label):
 
 # run primary, tertiary, quinary overlaps
 def run_overlaps_for_ptq_against_s(secondary,pfile,tfile,qfile):
-	pdprimary = count_overlap_df(secondary,pfile,'{0}'.format(pfile)) # make the pandas data sets for the count overlaps
+	pdprimary = count_overlap_df(secondary,pfile,'primary') # make the pandas data sets for the count overlaps
 	concat = pdprimary # rename to preserve
 	if tfile: # if optional arguments, add to panda
 		pdtertiary = count_overlap_df(secondary,tfile,'tertiary')
-		concat = concat.merge(pdtertiary,how='inner',on=['chr','start','end','size'])
-		concat['size'] /= 1000.
+		concat = concat.merge(pdtertiary,how='left',on=['chr','start','end','size'])
 		concat['density_tertiary'] = concat['intersect_tertiary']/concat['size']
 	if qfile: # if optional arguments, add to panda
-		pdquinary = count_overlap_df(secondary,qfile,'{0}'.format(qfile))
-		concat = concat.merge(pdquinary,how='inner',on=['chr','start','end','size'])
+		pdquinary = count_overlap_df(secondary,qfile,'quinary')
+		concat = concat.merge(pdquinary,how='left',on=['chr','start','end','size'])
+	concat['size'] /= 1000.
 	return concat
 
 # move elements without any overlaps
@@ -109,17 +109,17 @@ def chunks(l, n):
 
 # format the with/without regions for graphing
 def format_with_without_data_for_boxplot(pdfeatures,column,pfile,qfile):
-	dropzero = (pdfeatures.loc[pdfeatures['intersect_{0}'.format(pfile)] > 0])
+	dropzero = (pdfeatures.loc[pdfeatures['intersect_primary'] > 0])
 	sumdrop = dropzero[column].reset_index(drop=False)
 	sumdrop['region'] = 'With UCEs'
-	keepzero = (pdfeatures.loc[pdfeatures['intersect_{0}'.format(pfile)] < 1])
+	keepzero = (pdfeatures.loc[pdfeatures['intersect_primary'] < 1])
 	sumkeep = keepzero[column].reset_index(drop=False)
 	sumkeep['region'] = 'Without UCEs'
 	tertiarysum = pd.concat([sumdrop,sumkeep])
 	if qfile:
-		keepquin = (pdfeatures.loc[pdfeatures['intersect_{0}'.format(qfile)] > 0])
+		keepquin = (pdfeatures.loc[pdfeatures['intersect_quinary'] > 0])
 		sumquin = keepquin[column].reset_index(drop=False)
-		sumquin['region'] = 'With Mouse UCEs'
+		sumquin['region'] = 'Mouse UCEs'
 		tertiarysum = pd.concat([tertiarysum,sumquin])
 	tertiarysum.drop(columns=['index'],inplace=True)
 	return tertiarysum
@@ -160,9 +160,10 @@ def KSTest(aOverlapBP):
 	return ksStat, KsPval, strKSresult
 
 # run ks test for normal distribution and choose appropriate stats test
-def run_appropriate_test(pdgroup,yvalue):
+def run_appropriate_test(pdgroup,yvalue,qfile):
 	withuces = pdgroup[yvalue].loc[pdgroup['region']=='With UCEs']
 	withoutuces = pdgroup[yvalue].loc[pdgroup['region']=='Without UCEs']
+	mouseuces = pdgroup[yvalue].loc[pdgroup['region']=='Mouse UCEs']
 	ksStat,KsPval,strKSresult = KSTest(withuces)
 # 	if strKSresult == 'Yes':
 # 		statcoef,statpval = stats.ttest_ind(withuces,withoutuces)# or ttest_rel()
@@ -173,18 +174,32 @@ def run_appropriate_test(pdgroup,yvalue):
 # 		stattest = 'MW'
 # 		formatpval = '{:.01e}'.format(statpval)
 	statcoef,statpval = stats.mannwhitneyu(withuces,withoutuces)
+	if qfile:
+		mstatcoef,mstatpval = stats.mannwhitneyu(withuces,mouseuces)
+		mformatpval = formatpval = '{:.02e}'.format(mstatpval)
+	else:
+		mformatpval=None
 	stattest = 'Mann Whiteny U p-value'
 	formatpval = '{:.02e}'.format(statpval)
-	return formatpval,stattest
+	return formatpval,stattest,mformatpval
 
 # get the location where to add the p value annotation
 def set_pval_label_location(pdgroup,yvalue):
 	if yvalue == 'size':
-		addvalue = 750
+		addvalue = 1000
 	elif yvalue == 'intersect_tertiary':
-		addvalue = .0005
+		addvalue = 13
 	else:
 		addvalue = .000000005
+	return addvalue
+
+def set_pval_label_location_mouse(pdgroup,yvalue):
+	if yvalue == 'size':
+		addvalue = 500
+	elif yvalue == 'intersect_tertiary':
+		addvalue = 0
+	else:
+		addvalue = .000055
 	return addvalue
 
 # darken the lines around the boxplot to black
@@ -225,11 +240,16 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
 					axes.set_xticklabels(axes.get_xticklabels(),fontsize=8)
 					plt.setp(axes.xaxis.get_majorticklabels())#rotation=15
-					formatpval,stattest = run_appropriate_test(pdgroup,yvalue)
+					formatpval,stattest,mformatpval = run_appropriate_test(pdgroup,yvalue,qfile)
 					addvalue = set_pval_label_location(pdgroup,yvalue)
 					ylabelmax = pdgroup[yvalue].quantile(q=.97)
 					axes.plot([0,0,1,1],[ylabelmax+addvalue,ylabelmax+addvalue,ylabelmax+addvalue,ylabelmax+addvalue],lw=.75,c=boxcolor)
 					axes.text((0+1)*.5,ylabelmax+addvalue,'{0}: {1}'.format(stattest,formatpval),ha='center',va='bottom',color=boxcolor,size=6,clip_on=False)
+					if qfile:
+						maddvalue = set_pval_label_location_mouse(pdgroup,yvalue)
+						mylabelmax = pdgroup[yvalue].quantile(q=.97)
+						axes.plot([0,0,2,2],[mylabelmax+maddvalue,mylabelmax+maddvalue,mylabelmax+maddvalue,mylabelmax+maddvalue],lw=.75,c=boxcolor)
+						axes.text((0+2)*.5,mylabelmax+maddvalue,'{0}: {1}'.format(stattest,mformatpval),ha='center',va='bottom',color=boxcolor,size=6,clip_on=False)
 					datasetcounter += 1
 				else:
 					axes.remove()
