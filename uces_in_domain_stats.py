@@ -61,16 +61,16 @@ def intersect_bedfiles_c_true(afile,bfile):
 def run_print_number_file_features(file):
 	btfeatures = get_bedtools_features(file)
 	pdfeatures = convert_bedtools_to_panda(btfeatures)
-	pdlabel = label_coordinate_columns(pdfeatures)
 	print_number_of_elements(len(pdfeatures),file)
-	return pdlabel
+	return label_coordinate_columns(pdfeatures)
 
 # coordinate labels and size
 def label_coordinate_columns(pdfeature):
-	pdfeature['size'] = pdfeature.loc[:,2].astype(int)-pdfeature.loc[:,1].astype(int)
+	pdfeature['Size(Kb)'] = pdfeature.loc[:,2].astype(int)-pdfeature.loc[:,1].astype(int)
 	pdfeature.columns.values[0]='chr'
 	pdfeature.columns.values[1]='start'
 	pdfeature.columns.values[2]='end'
+	pdfeature['Size(Kb)'] /= 1000.# convert to Kb
 	return pdfeature
 
 # create panda for overlap count datasets
@@ -81,10 +81,6 @@ def count_overlap_df(secondary,file,label):
 	pdcoordinates.columns.values[3]='intersect_{0}'.format(label)
 	return pdcoordinates
 
-# total number of elements without overlaps
-def count_number_with_zero_overlaps(df,column):
-	return len(df[(df[column]==0)])
-
 # move elements without any overlaps
 def remove_rows_with_no_overlaps(overlaps,column):
 	return overlaps[overlaps[column]!=0]
@@ -92,88 +88,69 @@ def remove_rows_with_no_overlaps(overlaps,column):
 # get stats for list of columns
 def panda_describe_multiple_column(pdfeature):
 	intersectcols = [col for col in pdfeature.columns if 'intersect' in col]
-	sizecol = [col for col in pdfeature.columns if 'size' in col]
-	statcols=intersectcols+sizecol
+	sizecol = [col for col in pdfeature.columns if 'Size(Kb)' in col]
+	densitycol = [col for col in pdfeature.columns if 'Gene_Density(Kb)' in col]
+	statcols=intersectcols+sizecol+densitycol
 	return pdfeature[statcols].describe()
+
+# select a list of columns where the column name contains a key word
+def subset_column_by_keyword(pdfeature,key):
+	return pdfeature.filter(regex=key)
 
 # save panda to file with mode 'a' for appending
 def save_panda(pdData,strFilename):
-	pdData.to_csv(strFilename,sep='\t',index=True,mode='a')
+	pdData.to_csv(strFilename,sep='\t',index=True)#,mode='a'
 
 # get stats for single column
 def panda_describe_single_column(pdfeatures,name):
 	return pdfeatures[name].describe()
 
+# split into the three stats files and save
+def split_key_words_to_files(pdfeatures,pfile):
+	# domain size
+	sizedescribe = subset_column_by_keyword(pdfeatures,'Size')
+	save_panda(sizedescribe,'stats_domain_size_{0}.txt'.format(pfile))
+	# gene density
+	densitydescribe = subset_column_by_keyword(pdfeatures,'Gene_Density')
+	save_panda(densitydescribe,'stats_gene_density_{0}.txt'.format(pfile))
+	# number UCEs
+	intersectdescribe = subset_column_by_keyword(pdfeatures,'intersect')
+	save_panda(intersectdescribe,'stats_number_uces_{0}.txt'.format(pfile))
+
 def main():
 	args = get_args()
-	
-	# read in files from args
 	pfile = args.file
 	secondaryfiles = [line.strip() for line in args.secondaryfeatures]
 	tfile = args.tertiaryfeature
-	
-	# print the number of features in single feature files
 	labelprimary = run_print_number_file_features(pfile)
 	labeltertiary = run_print_number_file_features(tfile)
-
-	# initiate collection
 	lumpsecondary = []
-	
-	# process feature files
+	lumpsecondarystats = []
 	for sfile in secondaryfiles:
-	
-		# print number of features in secondary file
 		run_print_number_file_features(sfile)
-		
-		# get secondary features
 		secondary = get_bedtools_features(sfile)
-		
-		# make the pandas data sets for the count overlaps
-		pdprimary = count_overlap_df(secondary,pfile,'{0}'.format(pfile))
-		pdtertiary = count_overlap_df(secondary,tfile,'{0}'.format(tfile))
-		
-		# print the number of domains that do not have any uces
-		nooverlaps = count_number_with_zero_overlaps(pdprimary,'intersect_{0}'.format(pfile))
-		print '{0} instances of no overlaps of primary element on {1}'.format(nooverlaps,sfile)
-		
-		# concat the three data sets together
-		concattotal = pdprimary.merge(pdtertiary,how='inner',on=['chr','start','end','size'])
-		
-		# remove the regions with no uces
-		cleantotal = remove_rows_with_no_overlaps(concattotal,'intersect_{0}'.format(pfile))
-		
-		# add the data set to the lump sum to get the total stats at the end of the script
+		pdprimary = count_overlap_df(secondary,pfile,'UCEs')
+		pdtertiary = count_overlap_df(secondary,tfile,'Genes')
+		concattotal = pdprimary.join(pdtertiary,rsuffix='_extra')
+		concattotal['Gene_Density(Kb)'] = concattotal['intersect_Genes']/concattotal['Size(Kb)']
+		concattotal.drop(columns=['chr_extra','start_extra','end_extra','Size(Kb)_extra','intersect_Genes'],axis=1,inplace=True)
+		cleantotal = remove_rows_with_no_overlaps(concattotal,'intersect_UCEs')
 		lumpsecondary.append(cleantotal)
-		
-		# describe any file with a partial match of 'size' or 'intersect'
 		cleandescribe = panda_describe_multiple_column(cleantotal)
-		
-		# add the domain file name to the columns
 		cleandescribe.columns = [str(col) + '_{0}'.format(sfile) for col in cleandescribe.columns]
-		
-		# save panda to file
-		save_panda(cleandescribe,'stats_{0}_individual_domains.txt'.format(pfile))
-		
-	# get the stats for the individual files
-	primarystats = panda_describe_single_column(labelprimary,'size')
-	tertiarystats = panda_describe_single_column(labeltertiary,'size')
-	
-	# concat and get stats for all the secondary files
+		lumpsecondarystats.append(cleandescribe)
+	labelprimary.rename(columns={'Size(Kb)':'Size(Kb)_{0}'.format(pfile)},inplace=True)
+	primarystats = panda_describe_single_column(labelprimary,'Size(Kb)_{0}'.format(pfile))
+	labeltertiary.rename(columns={'Size(Kb)':'Size(Kb)_{0}'.format(tfile)},inplace=True)
+	tertiarystats = panda_describe_single_column(labeltertiary,'Size(Kb)_{0}'.format(tfile))
 	secondaryconcat = pd.concat(lumpsecondary)
-	secondarystats = panda_describe_single_column(secondaryconcat,'size')
-	
-	# get the total count stats for all the secondary files
-	primarycountstats = panda_describe_single_column(secondaryconcat,'intersect_{0}'.format(pfile))
-	tertiarycountstats = panda_describe_single_column(secondaryconcat,'intersect_{0}'.format(tfile))
-	
-	# concat all the stats into panda
-	allstats = pd.concat([primarystats,secondarystats,tertiarystats,primarycountstats,tertiarycountstats],axis=1)
-	
-	# correct column names with file names for clarity
-	allstats.columns = ['size_{0}'.format(pfile),'size_all_domains','size_{0}'.format(tfile),'counts_in_UCE_domains_{0}'.format(pfile),'counts_in_UCE_domains_{0}'.format(tfile)]
-	
-	# save the panda to file
-	save_panda(allstats,'stats_{0}_all_domains.txt'.format(pfile))
+	secondarydescribe = panda_describe_multiple_column(secondaryconcat)
+	secondarydescribe.columns = [str(col) + '_All_Domains' for col in secondarydescribe.columns]
+	lumpsecondarystats.append(secondarydescribe)
+	lumpsecondarystats.append(primarystats)
+	lumpsecondarystats.append(tertiarystats)
+	secondarystatsconcat = pd.concat(lumpsecondarystats,axis=1)
+	split_key_words_to_files(secondarystatsconcat,pfile)
 
 if __name__ == "__main__":
 	main()
