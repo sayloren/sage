@@ -177,8 +177,12 @@ def format_random_data_structure(random):
 		format.append(concat)
 	return format
 
+# save panda to file with mode 'a' for appending
+def save_panda(pdData,strFilename):
+	pdData.to_csv(strFilename,sep='\t',index=True,mode='a')
+
 # tile the point plots
-def run_tiled_subplots_per_binned_dataset(pddata,rndata,names,filename,bins):
+def run_tiled_subplots_per_binned_dataset(pddata,rndata,names,filename,bins,statname):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
 	plt.figure(figsize=(10,10))
@@ -198,7 +202,21 @@ def run_tiled_subplots_per_binned_dataset(pddata,rndata,names,filename,bins):
 					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='blue',scale=.75,ax=axes,capsize=.2,errwidth=.5,linewidth=.75,ci='sd')#'#9ecae1'
 # 					if name_chunk[intPlotCounter] == 'All Domains':
 					ksStat,KsPval = stats.ks_2samp(rngroup['sumbin'],pdgroup['sumbin'])
+					rnstat = rngroup['sumbin'].describe()
+					elstat = pdgroup['sumbin'].describe()
+					pdstat = pd.concat([elstat,rnstat],axis=1)
+					pdstat.columns = ['uces_{0}'.format(name_chunk[intPlotCounter]),'random_{0}'.format(name_chunk[intPlotCounter])]
+					labels = pdstat.index.tolist()
+					labels.extend(['coef','pvalue'])
 					formatpval = '{:.01e}'.format(KsPval)
+					empty = pd.Series([Nan,Nan],index=['uces_{0}'.format(name_chunk[intPlotCounter]),'random_{0}'.format(name_chunk[intPlotCounter])])
+					pdstat = pdstat.append(empty,ignore_index=True)
+					pdstat = pdstat.append(empty,ignore_index=True)
+					pdstat['labels'] = labels
+					pdstat.set_index('labels',inplace=True,drop=True)
+					pdstat.loc['coef','random_{0}'.format(name_chunk[intPlotCounter])] = ksStat
+					pdstat.loc['pvalue','random_{0}'.format(name_chunk[intPlotCounter])] = formatpval
+					save_panda(pdstat,statname)
 					ylabelcat = pd.concat([rngroup,pdgroup])
 					ylabelmax = ylabelcat['sumbin'].loc[ylabelcat['bin']==median(range(bins/2))].quantile(q=.75)
 					axes.text(bins/4, ylabelmax+10,'KS: {0}'.format(formatpval),ha='center',va='bottom',color='#000000',size=6,clip_on=False)
@@ -269,7 +287,7 @@ def main():
 		formatrandom = format_random_data_structure(lumprandom) # format the random regions to easily plot
 		# run tile plot for primaries binned
 		secondaryfiles.append('All Domains') # add a descriptor to the concated domain dataset
-		run_tiled_subplots_per_binned_dataset(lumpsecondary,formatrandom,secondaryfiles,'tiled_binned_UCEs_{0}.pdf'.format(stringname),bins)
+		run_tiled_subplots_per_binned_dataset(lumpsecondary,formatrandom,secondaryfiles,'tiled_binned_UCEs_{0}.pdf'.format(stringname),bins,'stats_binned_UCEs_{0}.txt'.format(stringname))
 	else:
 		secondaryfiles.append('All Domains') # add a descriptor to the concated domain dataset
 		run_tiled_subplots_per_binned_dataset_no_random(lumpsecondary,secondaryfiles,'tiled_binned_UCEs_{0}.pdf'.format(stringname))
