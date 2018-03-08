@@ -102,29 +102,35 @@ def subset_column_by_keyword(pdfeature,key):
 
 # save panda to file with mode 'a' for appending
 def save_panda(pdData,strFilename):
-	pdData.to_csv(strFilename,sep='\t',index=True)#,mode='a'
+	pdData.to_csv(strFilename,sep='\t',index=True,mode='a')#
 
 # get stats for single column
 def panda_describe_single_column(pdfeatures,name):
 	return pdfeatures[name].describe()
 
 # split into the three stats files and save
-def split_key_words_to_files(pdfeatures,pdfeaturesout,pfile):
+def split_key_words_to_files(pdfeatures,pdfeaturesout,pval,pfile):
 	# domain size
 	sizedescribe = subset_column_by_keyword(pdfeatures,'Size')
 	sizedescribeout = subset_column_by_keyword(pdfeaturesout,'Size')
+	sizedescribepval = subset_column_by_keyword(pval,'Size')
 	save_panda(sizedescribe,'stats_domain_size_{0}.txt'.format(pfile))
-	save_panda(sizedescribeout,'stats_domain_size_without_{0}.txt'.format(pfile))
+	save_panda(sizedescribeout,'stats_domain_size_{0}.txt'.format(pfile))
+	save_panda(sizedescribepval,'stats_domain_size_{0}.txt'.format(pfile))
 	# gene density
 	densitydescribe = subset_column_by_keyword(pdfeatures,'Gene_Density')
 	densitydescribeout = subset_column_by_keyword(pdfeaturesout,'Gene_Density')
+	densitydescribepval = subset_column_by_keyword(pval,'Gene_Density')
 	save_panda(densitydescribe,'stats_gene_density_{0}.txt'.format(pfile))
-	save_panda(densitydescribeout,'stats_gene_density_without_{0}.txt'.format(pfile))
+	save_panda(densitydescribeout,'stats_gene_density_{0}.txt'.format(pfile))
+	save_panda(densitydescribepval,'stats_gene_density_{0}.txt'.format(pfile))
 	# number UCEs
 	intersectdescribe = subset_column_by_keyword(pdfeatures,'intersect')
 	intersectdescribeout = subset_column_by_keyword(pdfeaturesout,'intersect')
+	intersectdescribepval = subset_column_by_keyword(pval,'intersect')
 	save_panda(intersectdescribe,'stats_number_uces_{0}.txt'.format(pfile))
-	save_panda(intersectdescribeout,'stats_number_uces_without_{0}.txt'.format(pfile))
+	save_panda(intersectdescribeout,'stats_number_uces_{0}.txt'.format(pfile))
+	save_panda(intersectdescribepval,'stats_number_uces_{0}.txt'.format(pfile))
 
 def main():
 	args = get_args()
@@ -170,7 +176,7 @@ def main():
 		withoutdescribe = panda_describe_multiple_column(withoutuces)
 		
 		withdescribe.columns = [str(col) + '_{0}'.format(sfile) for col in withdescribe.columns]
-		withoutdescribe.columns = [str(col) + '_{0}'.format(sfile) for col in withoutdescribe.columns]
+		withoutdescribe.columns = [str(col) + '_without_{0}'.format(sfile) for col in withoutdescribe.columns]
 		
 		lumpsecstats.append(withdescribe)
 		lumpsecstatsout.append(withoutdescribe)
@@ -178,11 +184,21 @@ def main():
 	seccat = pd.concat(lumpsec)
 	seccatout = pd.concat(lumpsecout)
 	
+	statcoefintersect,statpvalintersect = stats.mannwhitneyu(seccat['intersect_UCEs'],seccatout['intersect_UCEs'])
+	statcoefsize,statpvalsize = stats.mannwhitneyu(seccat['Size(Kb)'],seccatout['Size(Kb)'])
+	statcoefdensity,statpvaldensity = stats.mannwhitneyu(seccat['Gene_Density(Kb)'],seccatout['Gene_Density(Kb)'])
+	formatpvalintersect = '{:.02e}'.format(statpvalintersect)
+	formatpvalsize = '{:.02e}'.format(statpvalsize)
+	formatpvaldensity = '{:.02e}'.format(statpvaldensity)
+	
+	pdmannwhitney = pd.DataFrame({'p-value':[formatpvalintersect,formatpvalsize,formatpvaldensity],'coeff':[statcoefintersect,statcoefsize,statcoefdensity],'dataset':['intersect_UCEs_All_Domains','Size(Kb)_All_Domains','Gene_Density(Kb)_All_Domains']})
+	lumppval.append(pdmannwhitney)
+	
 	secdescribe = panda_describe_multiple_column(seccat)
 	secdescribeout = panda_describe_multiple_column(seccatout)
 	
 	secdescribe.columns = [str(col) + '_All_Domains' for col in secdescribe.columns]
-	secdescribeout.columns = [str(col) + '_All_Domains' for col in secdescribeout.columns]
+	secdescribeout.columns = [str(col) + '_without_All_Domains' for col in secdescribeout.columns]
 	
 	lumpsecstats.append(secdescribe)
 	lumpsecstatsout.append(secdescribeout)
@@ -196,10 +212,10 @@ def main():
 	secstatscat = pd.concat(lumpsecstats,axis=1)
 	secstatscatout = pd.concat(lumpsecstatsout,axis=1)
 	pvalcat = pd.concat(lumppval)
-	pvalcat.reset_index(drop=True,inplace=True)
-	save_panda(pvalcat,'stats_pvalues_{0}.txt'.format(pfile))
+	pvalcat.set_index(keys='dataset',inplace=True,drop=True)
+	tpvalcat = pvalcat.T
 	
-	split_key_words_to_files(secstatscat,secstatscatout,pfile)
+	split_key_words_to_files(secstatscat,secstatscatout,tpvalcat,pfile)
 
 if __name__ == "__main__":
 	main()

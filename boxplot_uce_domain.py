@@ -45,6 +45,7 @@ import matplotlib
 import numpy as np
 from scipy import stats
 import math
+from numpy import nan as Nan
 
 # set args
 def get_args():
@@ -159,12 +160,24 @@ def KSTest(aOverlapBP):
 		strKSresult = "Yes"
 	return ksStat, KsPval, strKSresult
 
+# save panda to file with mode 'a' for appending
+def save_panda(pdData,strFilename):
+	pdData.to_csv(strFilename,sep='\t',index=True,mode='a')
+
 # run ks test for normal distribution and choose appropriate stats test
-def run_appropriate_test(pdgroup,yvalue,qfile):
+def run_appropriate_test(pdgroup,yvalue,qfile,sfile,statsname):
 	withuces = pdgroup[yvalue].loc[pdgroup['region']=='With UCEs']
 	withoutuces = pdgroup[yvalue].loc[pdgroup['region']=='Without UCEs']
-	mouseuces = pdgroup[yvalue].loc[pdgroup['region']=='Mouse UCEs']
-	ksStat,KsPval,strKSresult = KSTest(withuces)
+	
+	withucestat = withuces.describe()
+	withoutucestat = withoutuces.describe()
+
+	pdstat = pd.concat([withucestat,withoutucestat],axis=1)
+	pdstat.columns = ['withuce_{0}'.format(sfile),'withoutuce_{0}'.format(sfile)]
+	labels = pdstat.index.tolist()
+	labels.extend(['coef','pvalue'])
+
+# 	ksStat,KsPval,strKSresult = KSTest(withuces)
 # 	if strKSresult == 'Yes':
 # 		statcoef,statpval = stats.ttest_ind(withuces,withoutuces)# or ttest_rel()
 # 		stattest = 'TT'
@@ -175,12 +188,36 @@ def run_appropriate_test(pdgroup,yvalue,qfile):
 # 		formatpval = '{:.01e}'.format(statpval)
 	statcoef,statpval = stats.mannwhitneyu(withuces,withoutuces)
 	if qfile:
+		mouseuces = pdgroup[yvalue].loc[pdgroup['region']=='Mouse UCEs']
 		mstatcoef,mstatpval = stats.mannwhitneyu(withuces,mouseuces)
 		mformatpval = formatpval = '{:.02e}'.format(mstatpval)
+		
+		mouseucestat = mouseuces.describe()
+		pdstat = pd.concat([pdstat,mouseucestat],axis=1)
+		pdstat.columns = ['withuce_{0}'.format(sfile),'withoutuce_{0}'.format(sfile),'mouseuce_{0}'.format(sfile)]
+		
+		coef = pd.Series([Nan,Nan,mstatcoef],index=['withuce_{0}'.format(sfile),'withoutuce_{0}'.format(sfile),'mouseuce_{0}'.format(sfile)])
+		pval = pd.Series([Nan,Nan,mformatpval],index=['withuce_{0}'.format(sfile),'withoutuce_{0}'.format(sfile),'mouseuce_{0}'.format(sfile)])
+		
+		pdstat = pdstat.append(coef,ignore_index=True)
+		pdstat = pdstat.append(pval,ignore_index=True)
+		
 	else:
 		mformatpval=None
+		empty = pd.Series([Nan,Nan],index=['withuce_{0}'.format(sfile),'withoutuce_{0}'.format(sfile)])
+		pdstat = pdstat.append(empty,ignore_index=True)
+		pdstat = pdstat.append(empty,ignore_index=True)
+
 	stattest = 'Mann Whiteny U p-value'
 	formatpval = '{:.02e}'.format(statpval)
+	
+	pdstat['labels'] = labels
+	pdstat.set_index('labels',inplace=True,drop=True)
+	pdstat.loc['coef','withoutuce_{0}'.format(sfile)] = statcoef
+	pdstat.loc['pvalue','withoutuce_{0}'.format(sfile)] = formatpval
+	
+	save_panda(pdstat,'{0}.txt'.format(statsname))
+
 	return formatpval,stattest,mformatpval
 
 # get the location where to add the p value annotation
@@ -214,7 +251,7 @@ def darkend_boxplot_lines(axes,numboxes,numlines,boxcolor):
 			line.set_mec(boxcolor)
 
 # tile the boxplots
-def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filename,pfile,qfile):
+def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filename,pfile,qfile,statsname):
 	sns.set_style('ticks')
 	pp = PdfPages(filename)
 	plt.figure(figsize=(10,10))
@@ -239,8 +276,8 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 					darkend_boxplot_lines(axes,numboxes,numlines,boxcolor)
 					axes.set_title(name_chunk[intPlotCounter].split('.',1)[0],size=8)
 					axes.set_xticklabels(axes.get_xticklabels(),fontsize=8)
-					plt.setp(axes.xaxis.get_majorticklabels())#rotation=15
-					formatpval,stattest,mformatpval = run_appropriate_test(pdgroup,yvalue,qfile)
+					plt.setp(axes.xaxis.get_majorticklabels())
+					formatpval,stattest,mformatpval = run_appropriate_test(pdgroup,yvalue,qfile,name_chunk[intPlotCounter],statsname)
 					addvalue = set_pval_label_location(pdgroup,yvalue)
 					ylabelmax = pdgroup[yvalue].quantile(q=.97)
 					axes.plot([0,0,1,1],[ylabelmax+addvalue,ylabelmax+addvalue,ylabelmax+addvalue,ylabelmax+addvalue],lw=.75,c=boxcolor)
@@ -262,8 +299,6 @@ def run_tiled_subplots_per_boxplot_dataset(pddata,yvalue,ylabeltext,names,filena
 
 def main():
 	args = get_args()
-	
-	# read in files from args
 	stringname = args.stringname
 	pfile = args.file
 	secondaryfiles = [line.strip() for line in args.secondaryfeatures]
@@ -275,59 +310,29 @@ def main():
 		qfile = args.quinaryfeature
 	else:
 		qfile = None
-
-	# initiate collections
 	lumpsecondary = []
 	lumpsecondarycoords = []
-	
-	# process feature files
 	for sfile in secondaryfiles:
-		
-		# get secondary features
 		secondary = get_bedtools_features(sfile)
-		
-		# run count overlaps for primary, tertiary, quinary against the secondary regions
 		concat = run_overlaps_for_ptq_against_s(secondary,pfile,tfile,qfile)
-		
-		# just the secondary coords
 		coords = concat[['chr','start','end']]
-		
-		# add the coords to the lump later run a set for all the domains
 		lumpsecondarycoords.append(coords)
-		
-		# add the data set to the lump sum to get the total for the end of the script
 		lumpsecondary.append(concat)
-	
-	# concat lumped regions
 	concatsecondary = pd.concat(lumpsecondary)
 	concatsecondarycoords = pd.concat(lumpsecondarycoords)
-	
-	# convert lump secondary coordinates panda to bedtool
 	btconcatsecondary = panda_to_bedtool(concatsecondarycoords)
-	
-	# run overlap with primary/tertiary/quinary again
 	pdoverlapssecondary = run_overlaps_for_ptq_against_s(btconcatsecondary,pfile,tfile,qfile)
-	
-	# randomly select a subset of the total set based on how many sets of secondary regions input
 	fracrandom = 1.0/len(secondaryfiles)
 	pdrandomsecondary = pdoverlapssecondary.sample(frac=fracrandom)
-	
-	# add the concated all domains to the list to graph
 	lumpsecondary.append(pdrandomsecondary) # the subsampled
 	lumpsecondary.append(pdoverlapssecondary) # the non-subsampled
-	
-	# add a descriptor to the concated domain dataset
 	perrandom = fracrandom*100
 	secondaryfiles.append('All Domains, Sub-Sampled 1/{0}'.format(perrandom)) # the subsampled
 	secondaryfiles.append('All Domains, Not Sub-Sampled') # the non-subsampled
-	
-	# run the tile plot secondary sizes
-	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (Kb)',secondaryfiles,'tiled_domain_sizes_{0}.pdf'.format(stringname),pfile,qfile)
-	
+	run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'size','Size (Kb)',secondaryfiles,'tiled_domain_sizes_{0}.pdf'.format(stringname),pfile,qfile,'stats_domain_sizes_{0}.txt'.format(stringname))
 	if tfile:
-		# run tile plot for tertiary counts
-		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number_{0}.pdf'.format(stringname),pfile,qfile)
-		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'density_tertiary','Gene Density (Kb)',secondaryfiles,'tiled_gene_density_{0}.pdf'.format(stringname),pfile,qfile)
+		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'intersect_tertiary','Frequency',secondaryfiles,'tiled_gene_number_{0}.pdf'.format(stringname),pfile,qfile,'stats_gene_number_{0}.txt'.format(stringname))
+		run_tiled_subplots_per_boxplot_dataset(lumpsecondary,'density_tertiary','Gene Density (Kb)',secondaryfiles,'tiled_gene_density_{0}.pdf'.format(stringname),pfile,qfile,'stats_gene_density_{0}.txt'.format(stringname))
 
 if __name__ == "__main__":
 	main()
