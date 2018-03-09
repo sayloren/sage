@@ -41,6 +41,7 @@ import matplotlib
 import numpy as np
 from scipy import stats
 from numpy import median
+from numpy import nan as Nan
 
 # set args
 def get_args():
@@ -201,6 +202,7 @@ def run_tiled_subplots_per_binned_dataset(pddata,rndata,names,filename,bins,stat
 					sns.pointplot(data=rngroup,x='bin',y='sumbin',color='grey',scale=.75,ax=axes,capsize=.2,errwidth=.5,linewidth=.75,ci='sd')#'#a6a6a6'
 					sns.pointplot(data=pdgroup,x='bin',y='sumbin',color='blue',scale=.75,ax=axes,capsize=.2,errwidth=.5,linewidth=.75,ci='sd')#'#9ecae1'
 # 					if name_chunk[intPlotCounter] == 'All Domains':
+					print rngroup['sumbin'],pdgroup['sumbin']
 					ksStat,KsPval = stats.ks_2samp(rngroup['sumbin'],pdgroup['sumbin'])
 					rnstat = rngroup['sumbin'].describe()
 					elstat = pdgroup['sumbin'].describe()
