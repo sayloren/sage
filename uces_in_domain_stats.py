@@ -82,18 +82,14 @@ def count_overlap_df(secondary,file,label):
 	pdcoordinates.columns.values[3]='intersect_{0}'.format(label)
 	return pdcoordinates
 
-# split the with and without element groups
-def split_rows_with_no_overlaps(overlaps,column):
-	withuces = overlaps[overlaps[column]!=0]
-	withoutuces = overlaps[overlaps[column]==0]
-	return withuces,withoutuces
+# remove those without elements
+def remove_rows_with_no_overlaps(overlaps,column):
+	return overlaps[overlaps[column]!=0]
 
 # get stats for list of columns
 def panda_describe_multiple_column(pdfeature):
 	intersectcols = [col for col in pdfeature.columns if 'intersect' in col]
-	sizecol = [col for col in pdfeature.columns if 'Size(Kb)' in col]
-	densitycol = [col for col in pdfeature.columns if 'Gene_Density(Kb)' in col]
-	statcols=intersectcols+sizecol+densitycol
+	statcols=intersectcols+sizecol
 	return pdfeature[statcols].describe()
 
 # select a list of columns where the column name contains a key word
@@ -108,114 +104,31 @@ def save_panda(pdData,strFilename):
 def panda_describe_single_column(pdfeatures,name):
 	return pdfeatures[name].describe()
 
-# split into the three stats files and save
-def split_key_words_to_files(pdfeatures,pdfeaturesout,pval,pfile):
-	# domain size
-	sizedescribe = subset_column_by_keyword(pdfeatures,'Size')
-	sizedescribeout = subset_column_by_keyword(pdfeaturesout,'Size')
-	sizedescribepval = subset_column_by_keyword(pval,'Size')
-	save_panda(sizedescribe,'stats_domain_size_{0}.txt'.format(pfile))
-	save_panda(sizedescribeout,'stats_domain_size_{0}.txt'.format(pfile))
-	save_panda(sizedescribepval,'stats_domain_size_{0}.txt'.format(pfile))
-	# gene density
-	densitydescribe = subset_column_by_keyword(pdfeatures,'Gene_Density')
-	densitydescribeout = subset_column_by_keyword(pdfeaturesout,'Gene_Density')
-	densitydescribepval = subset_column_by_keyword(pval,'Gene_Density')
-	save_panda(densitydescribe,'stats_gene_density_{0}.txt'.format(pfile))
-	save_panda(densitydescribeout,'stats_gene_density_{0}.txt'.format(pfile))
-	save_panda(densitydescribepval,'stats_gene_density_{0}.txt'.format(pfile))
-	# number UCEs
-	intersectdescribe = subset_column_by_keyword(pdfeatures,'intersect')
-	intersectdescribeout = subset_column_by_keyword(pdfeaturesout,'intersect')
-	intersectdescribepval = subset_column_by_keyword(pval,'intersect')
-	save_panda(intersectdescribe,'stats_number_uces_{0}.txt'.format(pfile))
-	save_panda(intersectdescribeout,'stats_number_uces_{0}.txt'.format(pfile))
-	save_panda(intersectdescribepval,'stats_number_uces_{0}.txt'.format(pfile))
-
 def main():
 	args = get_args()
-	
 	pfile = args.file
 	secondaryfiles = [line.strip() for line in args.secondaryfeatures]
 	tfile = args.tertiaryfeature
-	
 	labelprimary = run_print_number_file_features(pfile)
 	labeltertiary = run_print_number_file_features(tfile)
-	
 	lumpsec,lumpsecstats = [],[]
-	lumpsecout,lumpsecstatsout = [],[]
-	lumppval = []
-	
 	for sfile in secondaryfiles:
-		
 		run_print_number_file_features(sfile)
 		secondary = get_bedtools_features(sfile)
 		pdprimary = count_overlap_df(secondary,pfile,'UCEs')
 		pdtertiary = count_overlap_df(secondary,tfile,'Genes')
-		
 		concattotal = pdprimary.join(pdtertiary,rsuffix='_extra')
-		concattotal['Gene_Density(Kb)'] = concattotal['intersect_Genes']/concattotal['Size(Kb)']
-		concattotal.drop(columns=['chr_extra','start_extra','end_extra','Size(Kb)_extra','intersect_Genes'],axis=1,inplace=True)
-		
-		withuces,withoutuces = split_rows_with_no_overlaps(concattotal,'intersect_UCEs')
-		
-		statcoefintersect,statpvalintersect = stats.mannwhitneyu(withuces['intersect_UCEs'],withoutuces['intersect_UCEs'])
-		statcoefsize,statpvalsize = stats.mannwhitneyu(withuces['Size(Kb)'],withoutuces['Size(Kb)'])
-		statcoefdensity,statpvaldensity = stats.mannwhitneyu(withuces['Gene_Density(Kb)'],withoutuces['Gene_Density(Kb)'])
-		formatpvalintersect = '{:.02e}'.format(statpvalintersect)
-		formatpvalsize = '{:.02e}'.format(statpvalsize)
-		formatpvaldensity = '{:.02e}'.format(statpvaldensity)
-		
-		pdmannwhitney = pd.DataFrame({'p-value':[formatpvalintersect,formatpvalsize,formatpvaldensity],'coeff':[statcoefintersect,statcoefsize,statcoefdensity],'dataset':['intersect_UCEs_{0}'.format(sfile),'Size(Kb)_{0}'.format(sfile),'Gene_Density(Kb)_{0}'.format(sfile)]})
-		lumppval.append(pdmannwhitney)
-		
+		concattotal.drop(columns=['chr_extra','start_extra','end_extra','Size(Kb)_extra'],axis=1,inplace=True)
+		withuces = remove_rows_with_no_overlaps(concattotal,'intersect_UCEs')
 		lumpsec.append(withuces)
-		lumpsecout.append(withoutuces)
-		
 		withdescribe = panda_describe_multiple_column(withuces)
-		withoutdescribe = panda_describe_multiple_column(withoutuces)
-		
 		withdescribe.columns = [str(col) + '_{0}'.format(sfile) for col in withdescribe.columns]
-		withoutdescribe.columns = [str(col) + '_without_{0}'.format(sfile) for col in withoutdescribe.columns]
-		
+		save_panda(withdescribe,'stats_intersect_domain_{0}.txt'.format(pfile))
 		lumpsecstats.append(withdescribe)
-		lumpsecstatsout.append(withoutdescribe)
-	
 	seccat = pd.concat(lumpsec)
-	seccatout = pd.concat(lumpsecout)
-	
-	statcoefintersect,statpvalintersect = stats.mannwhitneyu(seccat['intersect_UCEs'],seccatout['intersect_UCEs'])
-	statcoefsize,statpvalsize = stats.mannwhitneyu(seccat['Size(Kb)'],seccatout['Size(Kb)'])
-	statcoefdensity,statpvaldensity = stats.mannwhitneyu(seccat['Gene_Density(Kb)'],seccatout['Gene_Density(Kb)'])
-	formatpvalintersect = '{:.02e}'.format(statpvalintersect)
-	formatpvalsize = '{:.02e}'.format(statpvalsize)
-	formatpvaldensity = '{:.02e}'.format(statpvaldensity)
-	
-	pdmannwhitney = pd.DataFrame({'p-value':[formatpvalintersect,formatpvalsize,formatpvaldensity],'coeff':[statcoefintersect,statcoefsize,statcoefdensity],'dataset':['intersect_UCEs_All_Domains','Size(Kb)_All_Domains','Gene_Density(Kb)_All_Domains']})
-	lumppval.append(pdmannwhitney)
-	
 	secdescribe = panda_describe_multiple_column(seccat)
-	secdescribeout = panda_describe_multiple_column(seccatout)
-	
 	secdescribe.columns = [str(col) + '_All_Domains' for col in secdescribe.columns]
-	secdescribeout.columns = [str(col) + '_without_All_Domains' for col in secdescribeout.columns]
-	
-	lumpsecstats.append(secdescribe)
-	lumpsecstatsout.append(secdescribeout)
-	
-# 	labelprimary.rename(columns={'Size(Kb)':'Size(Kb)_{0}'.format(pfile)},inplace=True)
-# 	primarystats = panda_describe_single_column(labelprimary,'Size(Kb)_{0}'.format(pfile))
-# 	labeltertiary.rename(columns={'Size(Kb)':'Size(Kb)_{0}'.format(tfile)},inplace=True)
-# 	tertiarystats = panda_describe_single_column(labeltertiary,'Size(Kb)_{0}'.format(tfile))
-# 	lumpsecstats.append(primarystats)
-# 	lumpsecstats.append(tertiarystats)
-	secstatscat = pd.concat(lumpsecstats,axis=1)
-	secstatscatout = pd.concat(lumpsecstatsout,axis=1)
-	pvalcat = pd.concat(lumppval)
-	pvalcat.set_index(keys='dataset',inplace=True,drop=True)
-	tpvalcat = pvalcat.T
-	
-	split_key_words_to_files(secstatscat,secstatscatout,tpvalcat,pfile)
+	save_panda(secdescribe,'stats_intersect_domain_{0}.txt'.format(pfile))
 
 if __name__ == "__main__":
 	main()
