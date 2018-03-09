@@ -29,7 +29,7 @@ def get_args():
 	parser = argparse.ArgumentParser(description="Description")
 	parser.add_argument('-m',"--arraymean",default=5,type=int,help='the largest mean to make')
 	parser.add_argument('-n',"--arraynumber",type=int,default=1000,help='the number of elements in the array')
-	parser.add_argument('-s',"--arraystep",type=int,default=0.001,help='the size of the steps between elements in the array')
+	parser.add_argument('-s',"--arraystep",type=int,default=0.1,help='the size of the steps between elements in the array')
 	return parser.parse_args()
 
 # save panda to file
