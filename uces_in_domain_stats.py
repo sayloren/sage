@@ -89,7 +89,7 @@ def remove_rows_with_no_overlaps(overlaps,column):
 # get stats for list of columns
 def panda_describe_multiple_column(pdfeature):
 	intersectcols = [col for col in pdfeature.columns if 'intersect' in col]
-	statcols=intersectcols+sizecol
+	statcols=intersectcols
 	return pdfeature[statcols].describe()
 
 # select a list of columns where the column name contains a key word
