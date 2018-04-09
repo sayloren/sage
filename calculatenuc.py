@@ -115,9 +115,9 @@ def main():
 
 	allwhole = percentage_at_for_element(rangeFeatures['feature'],'allwhole')
 	collect.append(allwhole)
-	allupboundary = percentage_at_for_element(rangeFeatures['upstreamsequence'],'all{0}bp'.format(boundary))
+	allupboundary = percentage_at_for_element(rangeFeatures['upstreamsequence'],'allup{0}bp'.format(boundary))
 	collect.append(allupboundary)
-	alldownboundary = percentage_at_for_element(rangeFeatures['downstreamsequence'],'all{0}bp'.format(boundary))
+	alldownboundary = percentage_at_for_element(rangeFeatures['downstreamsequence'],'alldown{0}bp'.format(boundary))
 	collect.append(alldownboundary)
 	
 	if label:
@@ -126,9 +126,9 @@ def main():
 			type = (rangeFeatures[rangeFeatures['type'] == t])
 			typewhole = percentage_at_for_element(type['feature'],'{0}whole'.format(t))
 			collect.append(typewhole)
-			typeupboundary = percentage_at_for_element(type['upstreamsequence'],'{0}{1}bp'.format(t,boundary))
+			typeupboundary = percentage_at_for_element(type['upstreamsequence'],'{0}up{1}bp'.format(t,boundary))
 			collect.append(typeupboundary)
-			typedownboundary = percentage_at_for_element(type['downstreamsequence'],'{0}{1}bp'.format(t,boundary))
+			typedownboundary = percentage_at_for_element(type['downstreamsequence'],'{0}down{1}bp'.format(t,boundary))
 			collect.append(typedownboundary)
 
 	cat = pd.concat(collect)
